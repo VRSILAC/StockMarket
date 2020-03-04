@@ -7,8 +7,8 @@ import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 from candle import *
-# from matplotlib.finance import candlestick2_ohlc
 import keras
+import numpy as np
 from keras.models import load_model
 from keras.utils import to_categorical
 from keras.callbacks import EarlyStopping
@@ -126,6 +126,7 @@ class StockClass:
                     datetime.datetime.strptime(s.decode('ascii'), '%Y-%m-%d').timestamp())})
             self.ticker = [symbol]
             self.sector = [sector]
+            # data = self.flip_data(data)
             data = self.filter_out_nan(data)
             open = data[:, 1]
             open[open == 0] = 0.001
@@ -231,6 +232,9 @@ class StockClass:
             self.ticker = ['No File']
             print('file: %s.csv' % symbol, 'can not add data  - In Class')
 
+    def flip_data(self, data):
+        return data[::-1, :]
+
     def filter_out_nan(self, data):
         if self.ticker[:][0] != 'No File':
             for rr in range(data.shape[1]):
@@ -268,7 +272,7 @@ def gather_tickers(ticker_list):
     return tickers
 
 
-def make_labels_percent_gain(stocks, label_pg_crit):
+def make_labels_percent_gain(stocks, label_pg_crit=0):
     for i in range(len(stocks)):
         if stocks[i].ticker[0][:] != 'No File':
             idx = stocks[i].metrics_column_data['pct_change']
@@ -288,42 +292,62 @@ def normalize_data(data):
     return data
 
 
-def train_test_validate_2d(stocks):
-    col_data = stocks[0].metrics_column_data
-    split_percent = 0.80
-    split_percent2 = 0.95
+def get_sizes(stocks, split1, split2):
     train_sizes = [0]
     test_sizes = [0]
     trade_sizes = [0]
     for k in range(len(stocks)):
         if stocks[k].ticker[0] != 'No File':
             stock_len = len(stocks[k].metrics[:, 0])
-            split_idx1 = round(split_percent * stock_len)
-            split_idx2 = round(split_percent2 * stock_len)
+            split_idx1 = round(split1 * stock_len)
+            split_idx2 = round(split2 * stock_len)
             train_sizes.append(split_idx1)
             test_sizes.append(split_idx2 - split_idx1)
             trade_sizes.append(stock_len - split_idx2)
+    return train_sizes, test_sizes, trade_sizes
 
-    h = 30
-    w = stocks[0].metrics.shape[1]
-    train_sizes_idx = list(np.cumsum(np.array(train_sizes)))
-    train_data = np.zeros((train_sizes_idx[-1], h, w))
-    train_labels = np.zeros((train_sizes_idx[-1], 1))
 
-    test_sizes_idx = list(np.cumsum(np.array(test_sizes)))
-    test_data = np.zeros((test_sizes_idx[-1], h, w))
-    test_labels = np.zeros((test_sizes_idx[-1], 1))
+def allocate_train_test_trade(stocks, split1, split2, h, cnn):
+    train_sizes, test_sizes, trade_sizes = get_sizes(stocks, split1, split2)
+    if cnn:
 
-    trade_sizes_idx = list(np.cumsum(np.array(trade_sizes)))
-    trade_data = np.zeros((trade_sizes_idx[-1], h, w))
-    trade_labels = np.zeros((trade_sizes_idx[-1], 1))
+        w = stocks[0].metrics.shape[1]
+        train_sizes_idx = list(np.cumsum(np.array(train_sizes)))
+        train_data = np.zeros((train_sizes_idx[-1], h, w))
+        train_labels = np.zeros((train_sizes_idx[-1], 1))
+
+        test_sizes_idx = list(np.cumsum(np.array(test_sizes)))
+        test_data = np.zeros((test_sizes_idx[-1], h, w))
+        test_labels = np.zeros((test_sizes_idx[-1], 1))
+
+        trade_sizes_idx = list(np.cumsum(np.array(trade_sizes)))
+        trade_data = np.zeros((trade_sizes_idx[-1], h, w))
+        trade_labels = np.zeros((trade_sizes_idx[-1], 1))
+    else:
+        train_sizes_idx = list(np.cumsum(np.array(train_sizes)))
+        train_data = np.zeros((train_sizes_idx[-1], stocks[0].metrics.shape[1]))
+        train_labels = np.zeros((train_sizes_idx[-1], 1))
+
+        test_sizes_idx = list(np.cumsum(np.array(test_sizes)))
+        test_data = np.zeros((test_sizes_idx[-1], stocks[0].metrics.shape[1]))
+        test_labels = np.zeros((test_sizes_idx[-1], 1))
+
+        trade_sizes_idx = list(np.cumsum(np.array(trade_sizes)))
+        trade_data = np.zeros((trade_sizes_idx[-1], stocks[0].metrics.shape[1]))
+        trade_labels = np.zeros((trade_sizes_idx[-1], 1))
+
+    return train_data, train_labels, test_data, test_labels, trade_data, trade_labels
+
+
+def populate_class(stocks, split1, split2):
     total = len(stocks)
+    col_data = stocks[0].metrics_column_data
     for k in range(len(stocks)):
         waitbar(total, int(k))
         print(stocks[k].ticker[0])
         if stocks[k].ticker[0] != 'No File':
-            split_idx1 = round(split_percent * len(stocks[k].metrics[:, 0]))
-            split_idx2 = round(split_percent2 * len(stocks[k].metrics[:, 0]))
+            split_idx1 = round(split1 * len(stocks[k].metrics[:, 0]))
+            split_idx2 = round(split2 * len(stocks[k].metrics[:, 0]))
             stocks[k].train_data = stocks[k].metrics[:split_idx1, :].copy()
             stocks[k].test_data = stocks[k].metrics[split_idx1:split_idx2, :].copy()
             stocks[k].trade_data = stocks[k].metrics[split_idx2:, :].copy()
@@ -337,7 +361,21 @@ def train_test_validate_2d(stocks):
             stocks[k].train_labels = stocks[k].label_pg[:split_idx1]
             stocks[k].test_labels = stocks[k].label_pg[split_idx1:split_idx2]
             stocks[k].trade_labels = stocks[k].label_pg[split_idx2:]
+    return stocks
 
+
+def train_test_validate(stocks, split1, split2, h, cnn=True):
+    train_sizes, test_sizes, trade_sizes = get_sizes(stocks, split1, split2)
+    train_data, train_labels, test_data, test_labels, trade_data, trade_labels = allocate_train_test_trade(
+        stocks, split1, split2, h, cnn)
+
+    train_sizes_idx = list(np.cumsum(np.array(train_sizes)))
+    test_sizes_idx = list(np.cumsum(np.array(test_sizes)))
+    trade_sizes_idx = list(np.cumsum(np.array(trade_sizes)))
+
+    if cnn:
+        w = 33  # stocks[0].metrics.shape[1]
+        for k in range(len(stocks)):
             stocks[k].trade_data_tensor = np.zeros((trade_sizes[k + 1], h, w))
             for n in range(train_sizes[k + 1]):
                 if n >= h:
@@ -352,76 +390,14 @@ def train_test_validate_2d(stocks):
                     tsi = trade_sizes_idx[k]
                     trade_data[tsi + n, :, :] = stocks[k].trade_data[int(n - h):n, :]
                     stocks[k].trade_data_tensor[n, :, :] = stocks[k].trade_data[int(n - h):n, :]
-            train_labels[train_sizes_idx[k]:train_sizes_idx[k + 1]] = stocks[k].train_labels
-            test_labels[test_sizes_idx[k]:test_sizes_idx[k + 1]] = stocks[k].test_labels
-            trade_labels[trade_sizes_idx[k]:trade_sizes_idx[k + 1]] = stocks[k].trade_labels
 
-    train_labels_og = train_labels
-    test_labels_og = test_labels
-    trade_labels_og = trade_labels
-    buy_mask = np.nonzero(train_labels_og == 1)[0]
-    sell_mask = np.nonzero(train_labels_og == 0)[0]
-    keep_idx = random.sample(list(sell_mask), len(buy_mask))
-    keep = np.hstack((keep_idx, buy_mask))
+        train_labels[train_sizes_idx[k]:train_sizes_idx[k + 1]] = stocks[k].train_labels
+        test_labels[test_sizes_idx[k]:test_sizes_idx[k + 1]] = stocks[k].test_labels
+        trade_labels[trade_sizes_idx[k]:trade_sizes_idx[k + 1]] = stocks[k].trade_labels
 
-    # train_labels = to_categorical(train_labels[keep, :])
-    train_labels = to_categorical(train_labels)
-    test_labels = to_categorical(test_labels)
-    # train_data = train_data[keep, :]
-
-    train = (train_data, train_labels, train_labels_og)
-    test = (test_data, test_labels, test_labels_og)
-    validate = (trade_data, trade_labels, trade_labels_og)
-    return train, test, validate
-
-
-def train_test_validate_1d(stocks):
-    col_data = stocks[0].metrics_column_data
-    split_percent = 0.80
-    split_percent2 = 0.95
-    train_sizes = [0]
-    test_sizes = [0]
-    trade_sizes = [0]
-    for k in range(len(stocks)):
-        if stocks[k].ticker[0] != 'No File':
-            stock_len = len(stocks[k].metrics[:, 0])
-            split_idx1 = round(split_percent * stock_len)
-            split_idx2 = round(split_percent2 * stock_len)
-            train_sizes.append(split_idx1)
-            test_sizes.append(split_idx2 - split_idx1)
-            trade_sizes.append(stock_len - split_idx2)
-
-    train_sizes_idx = list(np.cumsum(np.array(train_sizes)))
-    train_data = np.zeros((train_sizes_idx[-1], stocks[0].metrics.shape[1]))
-    train_labels = np.zeros((train_sizes_idx[-1], 1))
-
-    test_sizes_idx = list(np.cumsum(np.array(test_sizes)))
-    test_data = np.zeros((test_sizes_idx[-1], stocks[0].metrics.shape[1]))
-    test_labels = np.zeros((test_sizes_idx[-1], 1))
-
-    trade_sizes_idx = list(np.cumsum(np.array(trade_sizes)))
-    trade_data = np.zeros((trade_sizes_idx[-1], stocks[0].metrics.shape[1]))
-    trade_labels = np.zeros((trade_sizes_idx[-1], 1))
-    total = len(stocks)
-    for k in range(len(stocks)):
-        waitbar(total, int(k))
-        print(stocks[k].ticker[0])
-        if stocks[k].ticker[0] != 'No File':
-            split_idx1 = round(split_percent * len(stocks[k].metrics[:, 0]))
-            split_idx2 = round(split_percent2 * len(stocks[k].metrics[:, 0]))
-            stocks[k].train_data = stocks[k].metrics[:split_idx1, :].copy()
-            stocks[k].test_data = stocks[k].metrics[split_idx1:split_idx2, :].copy()
-            stocks[k].trade_data = stocks[k].metrics[split_idx2:, :].copy()
-            norm_except = col_data['pct_change']
-            norm_these = np.delete(np.arange(len(col_data)), norm_except)
-            stocks[k].train_data[:, norm_these] = normalize_data(
-                stocks[k].train_data[:, norm_these])
-            stocks[k].test_data[:, norm_these] = normalize_data(stocks[k].test_data[:, norm_these])
-            stocks[k].trade_data[:, norm_these] = normalize_data(
-                stocks[k].trade_data[:, norm_these])
-            stocks[k].train_labels = stocks[k].label_pg[:split_idx1]
-            stocks[k].test_labels = stocks[k].label_pg[split_idx1:split_idx2]
-            stocks[k].trade_labels = stocks[k].label_pg[split_idx2:]
+        # train = (train_data, train_labels, train_labels_og)  # test = (test_data, test_labels, test_labels_og)  # validate = (trade_data, trade_labels, trade_labels_og)
+    else:
+        for k in range(len(stocks)):
             train_data[train_sizes_idx[k]:train_sizes_idx[k + 1]] = stocks[k].train_data
             test_data[test_sizes_idx[k]:test_sizes_idx[k + 1]] = stocks[k].test_data
             trade_data[trade_sizes_idx[k]:trade_sizes_idx[k + 1]] = stocks[k].trade_data
@@ -429,19 +405,25 @@ def train_test_validate_1d(stocks):
             test_labels[test_sizes_idx[k]:test_sizes_idx[k + 1]] = stocks[k].test_labels
             trade_labels[trade_sizes_idx[k]:trade_sizes_idx[k + 1]] = stocks[k].trade_labels
 
+        # train_labels_og = train_labels  # test_labels_og = test_labels  # trade_labels_og = trade_labels  # buy_mask = np.nonzero(train_labels_og == 1)[0]  # sell_mask = np.nonzero(train_labels_og == 0)[0]  # keep_idx = random.sample(list(sell_mask), len(buy_mask))  # keep = np.hstack((keep_idx, buy_mask))  #  # train_labels = to_categorical(train_labels[keep, :])  # test_labels = to_categorical(test_labels)  # train_data = train_data[keep, :]
+
     train_labels_og = train_labels
-    test_labels_og = test_labels
-    trade_labels_og = trade_labels
     buy_mask = np.nonzero(train_labels_og == 1)[0]
     sell_mask = np.nonzero(train_labels_og == 0)[0]
     keep_idx = random.sample(list(sell_mask), len(buy_mask))
     keep = np.hstack((keep_idx, buy_mask))
+    train_labels = to_categorical(train_labels[keep, :])
+    train_data = train_data[keep, :]
 
-    # train_labels = to_categorical(train_labels[keep, :])
-    train_labels = to_categorical(train_labels)
-    test_labels = to_categorical(test_labels)
-    # train_data = train_data[keep, :]
+    test_labels_og = test_labels
+    buy_mask = np.nonzero(test_labels_og == 1)[0]
+    sell_mask = np.nonzero(test_labels_og == 0)[0]
+    keep_idx = random.sample(list(sell_mask), len(buy_mask))
+    keep = np.hstack((keep_idx, buy_mask))
+    test_labels = to_categorical(test_labels[keep, :])
+    test_data = test_data[keep, :]
 
+    trade_labels_og = trade_labels
     train = (train_data, train_labels, train_labels_og)
     test = (test_data, test_labels, test_labels_og)
     validate = (trade_data, trade_labels, trade_labels_og)
@@ -457,17 +439,14 @@ def make_1d_ann(train, test, load_nn_model=0, model_name=''):
     n_outputs = 2
     model = Sequential()
     model.add(Dense(n_inputs, input_dim=n_inputs, activation='relu'))
-    # model.add(Dense(n_inputs * 2, activation='relu')s)
-    # model.add(Dense(n_inputs * 20, activation='relu'))
-    # model.add(Dense(n_inputs * 2, activation='relu'))
-    model.add(Dropout(0.4))
+    # model.add(Dropout(0.4))
     model.add(Dense(n_outputs))
-    omt = keras.optimizers.Adam(lr=0.00005)
+    omt = keras.optimizers.Adam(lr=0.005)
     loss = 'binary_crossentropy'
     model.compile(loss=loss, optimizer=omt, metrics=['binary_accuracy'])
     es = EarlyStopping(monitor='val_loss', patience=10)
     history = model.fit(train_data, train_labels, epochs=500,
-        batch_size=int(np.round((len(test_labels) / 100))), verbose=True, shuffle=False,
+        batch_size=int(len(test_labels)*0.01), verbose=True, shuffle=False,
         validation_data=(test_data, test_labels), callbacks=[es])
     scoresTest = model.evaluate(test_data, test_labels, verbose=0)
     prd = model.predict_classes(test_data)
@@ -480,10 +459,10 @@ def make_1d_ann(train, test, load_nn_model=0, model_name=''):
         prd = model.predict_classes(test_data)
         print(str(model.metrics_names[1]) + ' %.2f%%' % (
                 scoresTest[1] * 100) + ' accuracy on test data')
-    return model
+    return model, history
 
 
-def make_2d_cnn(train, test, load_nn_model=0, model_name=''):
+def make_2d_cnn(train, test, h, load_nn_model=0, model_name=''):
     train_data = train[0]
     train_labels = train[1]
     test_data = test[0]
@@ -494,18 +473,22 @@ def make_2d_cnn(train, test, load_nn_model=0, model_name=''):
     n_outputs = 2
     model = Sequential()
     model.add(
-        Conv2D(4, kernel_size=(5, 5), strides=(1, 1), activation='relu', input_shape=(30, 33, 1)))
+        Conv2D(8, kernel_size=(10, 10), strides=(1, 1), activation='relu', input_shape=(h, 33, 1)))
     model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
-    model.add(Conv2D(4, (5, 5), activation='relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.2))
+    model.add(Conv2D(8, (3, 3), activation='relu'))
+    model.add(BatchNormalization())
     model.add(Flatten())
+    model.add(Dense(10, activation='relu'))
     model.add(Dense(n_outputs, activation='softmax'))
-    omt = keras.optimizers.Adam(lr=0.00005)
+    omt = keras.optimizers.Adam(lr=0.0005)
     loss = 'binary_crossentropy'
     model.compile(loss=loss, optimizer=omt, metrics=['binary_accuracy'])
     es = EarlyStopping(monitor='val_loss', patience=10)
-    history = model.fit(train_data, train_labels, epochs=2, batch_size=128, verbose=True,
-        shuffle=False, validation_data=(test_data, test_labels), callbacks=[es])
+    history = model.fit(train_data, train_labels, epochs=100,
+        batch_size=int(len(test_labels) * 0.01), verbose=True, shuffle=False,
+        validation_data=(test_data, test_labels), callbacks=[es])
     scoresTest = model.evaluate(test_data, test_labels, verbose=0)
     prd = model.predict_classes(test_data)
     print(np.column_stack((prd, test_labels)))
@@ -517,117 +500,4 @@ def make_2d_cnn(train, test, load_nn_model=0, model_name=''):
         prd = model.predict_classes(test_data)
         print(str(model.metrics_names[1]) + ' %.2f%%' % (
                 scoresTest[1] * 100) + ' accuracy on test data')
-    return model
-
-
-def test_strat(stocks, model, cnn=False):
-    split_percent = 0.85
-    split_percent2 = 0.95
-    col_data = col_data = stocks[0].metrics_column_data
-    # to_show2 = random.sample(range(len(stocks)), 5)
-    stats_names = ['Stock', 'APG', 'WP', 'NumTrades', 'AvgHoldLen']
-    tkrs = []
-    stats2 = np.zeros((0, 4))
-    for k in range(len(stocks)):
-        if stocks[k].ticker[0] != 'No File':
-            split_idx1 = round(split_percent * len(stocks[k].metrics[:, 0]))
-            split_idx2 = round(split_percent2 * len(stocks[k].metrics[:, 0]))
-            # prd = model.predict_classes(stocks[k].trade_data[:,[0,1,2,3,4]])
-            if cnn:
-                prd = model.predict_classes(np.expand_dims(stocks[k].trade_data_tensor, axis=3))
-            else:
-                prd = model.predict_classes(stocks[k].trade_data)
-            buy_price = np.array([])
-            sell_price = np.array([])
-            buy_day = np.array([])
-            sell_day = np.array([])
-            i = -1
-            f_day = len(stocks[k].metrics[:, 0]) - len(prd)
-            ts = stocks[k]
-            pg = 2
-            open_idx = col_data['open']
-            close_idx = col_data['close']
-            while i < len(prd) - 2:
-                i += 1
-                if prd[i] == 1:
-                    i += 1
-                    buy_price = np.append(buy_price, ts.metrics[f_day + i, open_idx])
-                    buy_day = np.append(buy_day, f_day + i)
-                    pc = 100 * (ts.metrics[f_day + i, close_idx] - buy_price[-1]) / buy_price[-1]
-                    if pc > pg:
-                        sell_price = np.append(sell_price, ts.metrics[f_day + i, close_idx])
-                        sell_day = np.append(sell_day, f_day + i)
-                        i -= 1
-                    elif pc < -pg:
-                        sell_price = np.append(sell_price, ts.metrics[f_day + i, close_idx])
-                        sell_day = np.append(sell_day, f_day + i)
-                        i -= 1
-                    while abs(pc) < pg and i < len(prd) - 1:
-                        i += 1
-                        pc = 100 * (ts.metrics[f_day + i, close_idx] - buy_price[-1]) / buy_price[
-                            -1]
-                        if pc > pg:
-                            sell_price = np.append(sell_price, ts.metrics[f_day + i, close_idx])
-                            sell_day = np.append(sell_day, f_day + i)
-                            i -= 1
-                        elif pc < -pg:
-                            sell_price = np.append(sell_price, ts.metrics[f_day + i, close_idx])
-                            sell_day = np.append(sell_day, f_day + i)
-                            i -= 1
-                            break
-            if len(sell_price) != len(buy_price):
-                a = (sell_price[:] - buy_price[:len(sell_price)]) / buy_price[:len(sell_price)]
-                ahl = np.round(np.mean(sell_day - buy_day[:len(sell_price)]), 3)
-            else:
-                a = (sell_price[:] - buy_price[:]) / buy_price[:]
-                ahl = np.round(np.mean(sell_day - buy_day), 3)
-            if len(a) != 0:
-                print(2 * '\n' + str(stocks[k].ticker[0]) + ' Win Percent :' + str(
-                    np.round(100 * len(np.nonzero(a > 0)[0]) / len(a), 2)))
-                apg = np.round((100 * np.mean(a)), 2)
-                wp = np.round(100 * len(np.nonzero(a > 0)[0]) / len(a), 2)
-                nt = len(sell_day)
-                stocks[k].stats2 = np.array((apg, wp, nt, ahl))
-                stats2 = np.vstack((stats2, stocks[k].stats2))
-                tkrs.append(stocks[k].ticker[0])
-            else:
-                apg = 0
-                wp = 0
-                nt = 0
-            print(str(stocks[k].ticker[0]) + ' Average Percent Change :' + str(
-                np.round((100 * np.mean(a)), 2)))
-            print(str(stocks[k].ticker[0]) + ' Number of Trades :' + str(nt))
-            print(str(stocks[k].ticker[0]) + ' Average Hold Time :' + str(ahl) + 2 * '\n')
-            # if stocks[k].ticker[0] == 'QD':
-            if True:
-                # if 1==0:
-                # if 1==0:
-                # if len(buy_day)>5 and apg>0
-                # if buy_day[-1]==len(stocks[k].metrics[:, 0])-1:
-                plt.figure()
-                ax1 = plt.subplot(3, 1, 1)
-                high_idx = col_data['high']
-                low_idx = col_data['low']
-                test_open = stocks[k].metrics[split_idx2:, open_idx]
-                test_low = stocks[k].metrics[split_idx2:, low_idx]
-                test_high = stocks[k].metrics[split_idx2:, high_idx]
-                test_close = stocks[k].metrics[split_idx2:, close_idx]
-                candle(ax1, test_open, test_high, test_low, test_close, colorup="green",
-                    colordown="red", width=.4)
-                plt.plot(buy_day - f_day, ts.metrics[buy_day.astype(int), open_idx], 'g.',
-                    markersize=10)
-                plt.plot(sell_day - f_day, ts.metrics[sell_day.astype(int), close_idx], 'r.',
-                    markersize=10)
-                plt.title(stocks[k].ticker[0][:] + '  APG: ' + str(apg) + ' WP: ' + str(
-                    wp) + ' NumTrades: ' + str(nt) + ' AHL: ' + str(ahl))
-                ax2 = plt.subplot(3, 1, 2, sharex=ax1)
-                line2 = plt.plot(np.arange(len(stocks[k].trade_labels)),
-                    stocks[k].trade_labels[:, 0], 'k')
-                ax3 = plt.subplot(3, 1, 3, sharex=ax1)
-                line3 = plt.plot(np.arange(len(prd)), prd, 'k')
-    ljn = 13
-    print('Avg. % Gain'.ljust(ljn) + ' | ', 'Win %'.ljust(ljn) + ' | ',
-          '# Trades'.ljust(ljn) + ' | ', 'Avg. Hold'.ljust(12))
-    stat_print = [str(k).ljust(ljn) for k in np.round(np.mean(stats2, 0), 3)]
-    print(' |  '.join(stat_print))
-    plt.show()
+    return model, history
