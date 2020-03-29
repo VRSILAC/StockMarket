@@ -1,0 +1,4 @@
+GLD	Gold
+NUGT	Gold
+JNUG	Gold
+DUST	Gold
