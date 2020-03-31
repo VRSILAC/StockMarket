@@ -2,10 +2,12 @@ import re
 import os
 import time
 import random
+import pickle
 import requests
 import datetime
-import keras
 import numpy as np
+
+# import keras
 # from keras.models import load_model
 # from keras.utils import to_categorical
 # from keras.callbacks import EarlyStopping
@@ -123,6 +125,7 @@ class StockClass:
                     datetime.datetime.strptime(s.decode('ascii'), '%Y-%m-%d').timestamp())})
             self.ticker = [symbol]
             self.sector = [sector]
+            data = data[-1100:, :]
             data = self.filter_out_nan(data)
             open = data[:, 1]
             open[open == 0] = 0.001
@@ -223,13 +226,56 @@ class StockClass:
             ma10 = self.moving_average(10, data_mean)
             ma15 = self.moving_average(15, data_mean)
             ma20 = self.moving_average(20, data_mean)
+            ma50 = self.moving_average(50, data_mean)
+            ma100 = self.moving_average(100, data_mean)
+            ma200 = self.moving_average(200, data_mean)
+            dm_ma5 = (ma5 - data_mean) / data_mean
+
+            dm_ma10 = (ma10 - data_mean) / data_mean
+            dm_ma15 = (ma15 - data_mean) / data_mean
+            dm_ma20 = (ma20 - data_mean) / data_mean
+            dm_ma50 = (ma50 - data_mean) / data_mean
+            dm_ma100 = (ma100 - data_mean) / data_mean
+            dm_ma200 = (ma200 - data_mean) / data_mean
+
+            ma5_10 = (ma5 - ma10) / ma5
+            ma5_15 = (ma5 - ma15) / ma5
+            ma5_20 = (ma5 - ma20) / ma5
+            ma5_50 = (ma5 - ma50) / ma5
+            ma5_100 = (ma5 - ma100) / ma5
+            ma5_200 = (ma5 - ma200) / ma5
+            ma10_15 = (ma10 - ma15) / ma10
+            ma10_20 = (ma10 - ma20) / ma10
+            ma10_50 = (ma10 - ma50) / ma10
+            ma10_100 = (ma10 - ma100) / ma10
+            ma10_200 = (ma10 - ma200) / ma10
+            ma15_20 = (ma15 - ma20) / ma15
+            ma15_50 = (ma15 - ma50) / ma15
+            ma15_100 = (ma15 - ma100) / ma15
+            ma15_200 = (ma15 - ma200) / ma15
+            ma20_50 = (ma20 - ma50) / ma20
+            ma20_100 = (ma20 - ma100) / ma20
+            ma20_200 = (ma20 - ma200) / ma20
+            ma50_100 = (ma50 - ma100) / ma50
+            ma50_200 = (ma50 - ma200) / ma50
+            ma100_200 = (ma100 - ma200) / ma100
+            mb5, mb4, mb3, mb2, mb1 = (self.mbs(data[:, 1:5], data[:, 6], 30, 5)).T
+            mb1_p = (mb1 - data_mean) / data_mean
+            mb2_p = (mb2 - data_mean) / data_mean
+            mb3_p = (mb3 - data_mean) / data_mean
+            mb4_p = (mb4 - data_mean) / data_mean
+            mb5_p = (mb5 - data_mean) / data_mean
             self.metrics = np.column_stack((
                 open, high, low, close, volume, data_mean, open_diff, high_diff, low_diff,
                 close_diff, percent_change, d1price, d2price, d3price, d1volume, d2volume, d3volume,
                 ma5, ma10, ma15, ma20, open_diff2, high_diff2, low_diff2, close_diff2, open_diff3,
                 high_diff3, low_diff3, close_diff3, open_diff4, high_diff4, low_diff4, close_diff4,
                 gap1, gap2, gap3, gap4, percent_change1, percent_change2, percent_change3,
-                percent_change4))
+                percent_change4, ma5_10, ma5_15, ma5_20, ma5_50, ma5_100, ma5_200, ma10_15, ma10_20,
+                ma10_50, ma10_100, ma10_200, ma15_20, ma15_50, ma15_100, ma15_200, ma20_50,
+                ma20_100, ma20_200, ma50_100, ma50_200, ma100_200, dm_ma5, dm_ma10, dm_ma15,
+                dm_ma20, dm_ma50, dm_ma100, dm_ma200, mb1, mb2, mb3, mb4, mb5, mb1_p, mb2_p, mb3_p,
+                mb4_p, mb5_p))
 
             column_name_list = ['open', 'high', 'low', 'close', 'volume', 'ohlc_mean', 'open_diff',
                                 'high_diff', 'low_diff', 'close_diff', 'percent_change', 'd1price',
@@ -238,7 +284,13 @@ class StockClass:
                                 'close_diff2', 'open_diff3', 'high_diff3', 'low_diff3',
                                 'close_diff3', 'open_diff4', 'high_diff4', 'low_diff4',
                                 'close_diff4', 'gap1', 'gap2', 'gap3', 'gap4', 'percent_change1',
-                                'percent_change2', 'percent_change3', 'percent_change4']
+                                'percent_change2', 'percent_change3', 'percent_change4', 'ma5_10',
+                                'ma5_15', 'ma5_20', 'ma5_50', 'ma5_100', 'ma5_200', 'ma10_15',
+                                'ma10_20', 'ma10_50', 'ma10_100', 'ma10_200', 'ma15_20', 'ma15_50',
+                                'ma15_100', 'ma15_200', 'ma20_50', 'ma20_100', 'ma20_200',
+                                'ma50_100', 'ma50_200', 'ma100_200', 'dm_ma5', 'dm_ma10', 'dm_ma15',
+                                'dm_ma20', 'dm_ma50', 'dm_ma100', 'dm_ma200', 'mb1', 'mb2', 'mb3',
+                                'mb4', 'mb5', 'mb1_p', 'mb2_p', 'mb3_p', 'mb4_p', 'mb5_p']
             self.names = dict([(name, i) for i, name in enumerate(column_name_list)])
             print('Adding Data For Stock %s' % symbol)
         except Exception:
@@ -261,7 +313,27 @@ class StockClass:
         csum = np.cumsum(np.insert(data, np.ones(ma + 1), 0))
         mavg = (csum[ma:] - csum[:-ma]) / float(ma)
         mavg = np.delete(mavg, 0)
+        mavg[0] = mavg[1]
         return mavg
+
+    def mbs(self, price_ohlc, volume, days, bars):
+        price_ohlc = np.round(price_ohlc, 2)
+        volume = np.ceil(volume * 100 / np.max(volume)).astype(np.int)
+        monkey_bars = np.zeros((len(volume), bars))
+        pv = []
+        for k in range(len(volume)):
+            pv.append(list(price_ohlc[k, :]) * volume[k])
+        for k in np.arange(days, len(volume)):
+            print(k, end='\r')
+            all_data = np.hstack(pv[k - days:k])
+            max = np.max(all_data)
+            min = np.min(all_data)
+            counts, bins = np.histogram(all_data, bins=list(np.arange(min, max, (max - min) / 200)))
+            top_five_locations = np.argsort(counts)[-bars:]
+            top_five_prices = bins[top_five_locations]
+            monkey_bars[k, :] = top_five_prices
+        monkey_bars[:30, :] = monkey_bars[30, :]
+        return monkey_bars
 
 
 def parse_csv(symbols):
@@ -277,6 +349,11 @@ def parse_csv(symbols):
     return stock
 
 
+def clean_stock_list(stocks):
+    stocks = [stock for stock in stocks if stock.ticker[0][:] != 'No File']
+    return stocks
+
+
 def gather_tickers(ticker_list):
     tickers = open(ticker_list, 'r')
     tickers = tickers.read()
@@ -286,23 +363,51 @@ def gather_tickers(ticker_list):
     return tickers
 
 
-def make_labels_percent_gain(stocks, label_pg_crit=0):
+def save_stocks(stocks):
+    file = open('stocks.obj', 'wb')
+    pickle.dump(stocks, file)
+
+
+def load_stocks():
+    file = open('stocks.obj', 'rb')
+    stocks = pickle.load(file)
+    return stocks
+
+
+def make_labels_percent_gain(stocks, label, logic, label_pg_crit=0):
     for i in range(len(stocks)):
         if stocks[i].ticker[0][:] != 'No File':
-            idx = stocks[i].names['pct_change']
-            stocks[i].label_pg = np.zeros((len(stocks[i].metrics[:, 0]), 1))
-            buy_label_idx = np.nonzero(stocks[i].metrics[:, idx] >= label_pg_crit)
-            stocks[i].label_pg[buy_label_idx[0][:] - 1, :] = 1
+            idx = stocks[i].names['percent_change']
+            if not hasattr(stocks[i], 'label_pg'):
+                stocks[i].label_pg = np.zeros((len(stocks[i].metrics[:, 0]), 1))
+                stocks[i].label_pg_actual = np.zeros((len(stocks[i].metrics[:, 0]), 1))
+            if logic == 'lt':
+                label_idx = np.nonzero(stocks[i].metrics[:, idx] < label_pg_crit)
+            elif logic == 'le':
+                label_idx = np.nonzero(stocks[i].metrics[:, idx] < label_pg_crit)
+            elif logic == 'eq':
+                label_idx = np.nonzero(stocks[i].metrics[:, idx] == label_pg_crit)
+            elif logic == 'ne':
+                label_idx = np.nonzero(stocks[i].metrics[:, idx] != label_pg_crit)
+            elif logic == 'ge':
+                label_idx = np.nonzero(stocks[i].metrics[:, idx] >= label_pg_crit)
+            elif logic == 'gt':
+                label_idx = np.nonzero(stocks[i].metrics[:, idx] > label_pg_crit)
+            else:
+                print('Logic Not Supported')
+            stocks[i].label_pg[label_idx[0][:] - 1, :] = label
+            stocks[i].label_pg_actual[label_idx[0][:], :] = label
     return stocks
 
 
 def normalize_data(data):
     try:
         for i in range(data.shape[1]):
-            data[:, i] = data[:, i] - np.mean(data[:, i])
             data[:, i] = data[:, i] / np.max(data[:, i])
+            data[:, i] = data[:, i] - np.mean(data[:, i])
     except IndexError:
         data[:] = data[:] / np.max(data[:])
+        data[:] = data[:] - np.mean(data[:])
     return data
 
 
@@ -365,7 +470,15 @@ def populate_class(stocks, split1, split2):
             stocks[k].train_data = stocks[k].metrics[:split_idx1, :].copy()
             stocks[k].test_data = stocks[k].metrics[split_idx1:split_idx2, :].copy()
             stocks[k].trade_data = stocks[k].metrics[split_idx2:, :].copy()
-            norm_except = col_data['pct_change']
+            norm_except = [col_data['percent_change'], col_data['percent_change1'],
+                           col_data['percent_change2'], col_data['percent_change3'],
+                           col_data['percent_change4'], col_data['open_diff'],
+                           col_data['high_diff'], col_data['low_diff'], col_data['close_diff'],
+                           col_data['open_diff2'], col_data['high_diff2'], col_data['low_diff2'],
+                           col_data['close_diff2'], col_data['open_diff3'], col_data['high_diff3'],
+                           col_data['low_diff3'], col_data['close_diff3'], col_data['open_diff4'],
+                           col_data['high_diff4'], col_data['low_diff4'], col_data['close_diff4'],
+                           col_data['gap1'], col_data['gap2'], col_data['gap3'], col_data['gap4']]
             norm_these = np.delete(np.arange(len(col_data)), norm_except)
             stocks[k].train_data[:, norm_these] = normalize_data(
                 stocks[k].train_data[:, norm_these])
