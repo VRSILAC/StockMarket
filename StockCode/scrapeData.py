@@ -6,6 +6,7 @@ import pickle
 import requests
 import datetime
 import numpy as np
+from sklearn.externals import joblib
 
 # import keras
 # from keras.models import load_model
@@ -93,7 +94,7 @@ def waitbar(total, current):
     complete_sym = '-'
     advance = str(int(np.round((percent_complete / 2) - 1)) * complete_sym + here_sym)
     retreat = str(int(np.round(((100 - percent_complete) / 2) - 1)) * '.')
-    print(advance + retreat + ' ' + str(np.round(percent_complete, 3)) + '%')
+    print(advance + retreat + ' ' + str(np.round(percent_complete, 3)) + '%', end='\r')
 
 
 def download_quotes(symbols):
@@ -125,178 +126,59 @@ class StockClass:
                     datetime.datetime.strptime(s.decode('ascii'), '%Y-%m-%d').timestamp())})
             self.ticker = [symbol]
             self.sector = [sector]
-            data = data[-1100:, :]
             data = self.filter_out_nan(data)
-            open = data[:, 1]
-            open[open == 0] = 0.001
-            high = data[:, 2]
-            high[high == 0] = 0.001
-            low = data[:, 3]
-            low[low == 0] = 0.001
-            close = data[:, 4]
-            close[close == 0] = 0.001
-            volume = data[:, 6]
-            volume[volume == 0] = 0.001
+            open, high, low, close, volume = self.ohlcv(data)
             data_mean = data[:, 1:5].mean(1)
-            open_roll = np.roll(open, 1, 0)
-            high_roll = np.roll(high, 1, 0)
-            low_roll = np.roll(low, 1, 0)
-            close_roll = np.roll(close, 1, 0)
-            open_diff = (open - open_roll) / open_roll
-            high_diff = (high - high_roll) / high_roll
-            low_diff = (low - low_roll) / low_roll
-            close_diff = (close - close_roll) / close_roll
-            open_diff[0] = open[1]
-            high_diff[0] = high[1]
-            low_diff[0] = low[1]
-            close_diff[0] = close[1]
-            open_roll2 = np.roll(open, 2, 0)
-            high_roll2 = np.roll(high, 2, 0)
-            low_roll2 = np.roll(low, 2, 0)
-            close_roll2 = np.roll(close, 2, 0)
-            open_diff2 = (open - open_roll2) / open_roll2
-            high_diff2 = (high - high_roll2) / high_roll2
-            low_diff2 = (low - low_roll2) / low_roll2
-            close_diff2 = (close - close_roll2) / close_roll2
-            open_diff2[0:2] = open[1:3]
-            high_diff2[0:2] = high[1:3]
-            low_diff2[0:2] = low[1:3]
-            close_diff2[0:2] = close[1:3]
-            open_roll3 = np.roll(open, 3, 0)
-            high_roll3 = np.roll(high, 3, 0)
-            low_roll3 = np.roll(low, 3, 0)
-            close_roll3 = np.roll(close, 3, 0)
-            open_diff3 = (open - open_roll3) / open_roll3
-            high_diff3 = (high - high_roll3) / high_roll3
-            low_diff3 = (low - low_roll3) / low_roll3
-            close_diff3 = (close - close_roll3) / close_roll3
-            open_diff3[0:3] = open[1:4]
-            high_diff3[0:3] = high[1:4]
-            low_diff3[0:3] = low[1:4]
-            close_diff3[0:3] = close[1:4]
-            open_roll4 = np.roll(open, 4, 0)
-            high_roll4 = np.roll(high, 4, 0)
-            low_roll4 = np.roll(low, 4, 0)
-            close_roll4 = np.roll(close, 4, 0)
-            open_diff4 = (open - open_roll4) / open_roll4
-            high_diff4 = (high - high_roll4) / high_roll4
-            low_diff4 = (low - low_roll4) / low_roll4
-            close_diff4 = (close - close_roll4) / close_roll4
-            open_diff4[0:4] = open[1:5]
-            high_diff4[0:4] = high[1:5]
-            low_diff4[0:4] = low[1:5]
-            close_diff4[0:4] = close[1:5]
-            gap1 = (open - close_roll) / close_roll
-            gap2 = (open - close_roll2) / close_roll2
-            gap3 = (open - close_roll3) / close_roll3
-            gap4 = (open - close_roll4) / close_roll4
-            gap1[0] = gap1[1]
-            gap2[0:2] = gap2[3]
-            gap3[0:3] = gap3[4]
-            gap4[0:4] = gap4[5]
-            percent_change = 100 * (close - open) / open
-            percent_change[0] = 0
-            percent_change1 = 100 * (close_roll - open_roll) / open_roll
-            percent_change1[0] = percent_change1[1]
-            percent_change2 = 100 * (close_roll2 - open_roll2) / open_roll2
-            percent_change2[0:2] = percent_change2[3]
-            percent_change3 = 100 * (close_roll3 - open_roll3) / open_roll3
-            percent_change3[0:3] = percent_change3[4]
-            percent_change4 = 100 * (close_roll4 - open_roll4) / open_roll4
-            percent_change4[0:3] = percent_change4[4]
-            roll_1 = np.roll(data_mean, 1, 0)
-            roll_2 = np.roll(data_mean, 2, 0)
-            roll_3 = np.roll(data_mean, 3, 0)
-            vroll_1 = np.roll(data[:, -1], 1, 0)
-            vroll_2 = np.roll(data[:, -1], 2, 0)
-            vroll_3 = np.roll(data[:, -1], 3, 0)
-            d1price = roll_2 - 4 * roll_1 + 3 * data_mean
-            d2price = roll_2 - 2 * roll_1 + data_mean
-            d3price = -roll_3 + 3 * roll_2 - 3 * roll_1 + data_mean
-            d1volume = vroll_2 - 4 * vroll_1 + 3 * data[:, -1]
-            d2volume = vroll_2 - 2 * vroll_1 + data[:, -1]
-            d3volume = -vroll_3 + 3 * vroll_2 - 3 * vroll_1 + data[:, -1]
-            d1price[0:3] = d1price[3]
-            d2price[0:3] = d2price[3]
-            d3price[0:3] = d3price[3]
-            d1volume[0:3] = d1volume[3]
-            d2volume[0:3] = d2volume[3]
-            d3volume[0:3] = d3volume[3]
+            gap = self.gap(open, close, 1)
+            percent_change = self.percent_change(open, close, 0)
+            d1price, d2price, d3price = self.derivatives(data_mean)
+            d1volume, d2volume, d3volume = self.derivatives(volume)
             ma5 = self.moving_average(5, data_mean)
+            d1ma5, d2ma5, d3ma5 = self.derivatives(ma5)
             ma10 = self.moving_average(10, data_mean)
+            d1ma10, d2ma10, d3ma10 = self.derivatives(ma10)
             ma15 = self.moving_average(15, data_mean)
+            d1ma15, d2ma15, d3ma15 = self.derivatives(ma15)
             ma20 = self.moving_average(20, data_mean)
+            d1ma20, d2ma20, d3ma20 = self.derivatives(ma20)
             ma50 = self.moving_average(50, data_mean)
+            d1ma50, d2ma50, d3ma50 = self.derivatives(ma50)
             ma100 = self.moving_average(100, data_mean)
+            d1ma100, d2ma100, d3ma100 = self.derivatives(ma100)
             ma200 = self.moving_average(200, data_mean)
-            dm_ma5 = (ma5 - data_mean) / data_mean
-
-            dm_ma10 = (ma10 - data_mean) / data_mean
-            dm_ma15 = (ma15 - data_mean) / data_mean
-            dm_ma20 = (ma20 - data_mean) / data_mean
-            dm_ma50 = (ma50 - data_mean) / data_mean
-            dm_ma100 = (ma100 - data_mean) / data_mean
-            dm_ma200 = (ma200 - data_mean) / data_mean
-
-            ma5_10 = (ma5 - ma10) / ma5
-            ma5_15 = (ma5 - ma15) / ma5
-            ma5_20 = (ma5 - ma20) / ma5
-            ma5_50 = (ma5 - ma50) / ma5
-            ma5_100 = (ma5 - ma100) / ma5
-            ma5_200 = (ma5 - ma200) / ma5
-            ma10_15 = (ma10 - ma15) / ma10
-            ma10_20 = (ma10 - ma20) / ma10
-            ma10_50 = (ma10 - ma50) / ma10
-            ma10_100 = (ma10 - ma100) / ma10
-            ma10_200 = (ma10 - ma200) / ma10
-            ma15_20 = (ma15 - ma20) / ma15
-            ma15_50 = (ma15 - ma50) / ma15
-            ma15_100 = (ma15 - ma100) / ma15
-            ma15_200 = (ma15 - ma200) / ma15
-            ma20_50 = (ma20 - ma50) / ma20
-            ma20_100 = (ma20 - ma100) / ma20
-            ma20_200 = (ma20 - ma200) / ma20
-            ma50_100 = (ma50 - ma100) / ma50
-            ma50_200 = (ma50 - ma200) / ma50
-            ma100_200 = (ma100 - ma200) / ma100
-            mb5, mb4, mb3, mb2, mb1 = (self.mbs(data[:, 1:5], data[:, 6], 30, 5)).T
-            mb1_p = (mb1 - data_mean) / data_mean
-            mb2_p = (mb2 - data_mean) / data_mean
-            mb3_p = (mb3 - data_mean) / data_mean
-            mb4_p = (mb4 - data_mean) / data_mean
-            mb5_p = (mb5 - data_mean) / data_mean
+            d1ma200, d2ma200, d3ma200 = self.derivatives(ma200)
+            # mb5, mb4, mb3, mb2, mb1 = (self.mbs(data[:, 1:5], data[:, 6], 30, 5)).T
             self.metrics = np.column_stack((
-                open, high, low, close, volume, data_mean, open_diff, high_diff, low_diff,
-                close_diff, percent_change, d1price, d2price, d3price, d1volume, d2volume, d3volume,
-                ma5, ma10, ma15, ma20, open_diff2, high_diff2, low_diff2, close_diff2, open_diff3,
-                high_diff3, low_diff3, close_diff3, open_diff4, high_diff4, low_diff4, close_diff4,
-                gap1, gap2, gap3, gap4, percent_change1, percent_change2, percent_change3,
-                percent_change4, ma5_10, ma5_15, ma5_20, ma5_50, ma5_100, ma5_200, ma10_15, ma10_20,
-                ma10_50, ma10_100, ma10_200, ma15_20, ma15_50, ma15_100, ma15_200, ma20_50,
-                ma20_100, ma20_200, ma50_100, ma50_200, ma100_200, dm_ma5, dm_ma10, dm_ma15,
-                dm_ma20, dm_ma50, dm_ma100, dm_ma200, mb1, mb2, mb3, mb4, mb5, mb1_p, mb2_p, mb3_p,
-                mb4_p, mb5_p))
-
-            column_name_list = ['open', 'high', 'low', 'close', 'volume', 'ohlc_mean', 'open_diff',
-                                'high_diff', 'low_diff', 'close_diff', 'percent_change', 'd1price',
-                                'd2price', 'd3price', 'd1volume', 'd2volume', 'd3volume', 'ma5',
-                                'ma10', 'ma15', 'ma20', 'open_diff2', 'high_diff2', 'low_diff2',
-                                'close_diff2', 'open_diff3', 'high_diff3', 'low_diff3',
-                                'close_diff3', 'open_diff4', 'high_diff4', 'low_diff4',
-                                'close_diff4', 'gap1', 'gap2', 'gap3', 'gap4', 'percent_change1',
-                                'percent_change2', 'percent_change3', 'percent_change4', 'ma5_10',
-                                'ma5_15', 'ma5_20', 'ma5_50', 'ma5_100', 'ma5_200', 'ma10_15',
-                                'ma10_20', 'ma10_50', 'ma10_100', 'ma10_200', 'ma15_20', 'ma15_50',
-                                'ma15_100', 'ma15_200', 'ma20_50', 'ma20_100', 'ma20_200',
-                                'ma50_100', 'ma50_200', 'ma100_200', 'dm_ma5', 'dm_ma10', 'dm_ma15',
-                                'dm_ma20', 'dm_ma50', 'dm_ma100', 'dm_ma200', 'mb1', 'mb2', 'mb3',
-                                'mb4', 'mb5', 'mb1_p', 'mb2_p', 'mb3_p', 'mb4_p', 'mb5_p']
+                open, high, low, close, volume, data_mean, gap, percent_change, d1price, d2price,
+                d3price, d1volume, d2volume, d3volume, ma5, d1ma5, d2ma5, d3ma5, ma10, d1ma10,
+                d2ma10, d3ma10, ma15, d1ma15, d2ma15, d3ma15, ma20, d1ma20, d2ma20, d3ma20, ma50,
+                d1ma50, d2ma50, d3ma50, ma100, d1ma100, d2ma100, d3ma100, ma200, d1ma200, d2ma200,
+                d3ma200))
+            column_name_list = ['open', 'high', 'low', 'close', 'volume', 'data_mean', 'gap',
+                                'percent_change', 'd1price', 'd2price', 'd3price', 'd1volume',
+                                'd2volume', 'd3volume', 'ma5', 'd1ma5', 'd2ma5', 'd3ma5', 'ma10',
+                                'd1ma10', 'd2ma10', 'd3ma10', 'ma15', 'd1ma15', 'd2ma15', 'd3ma15',
+                                'ma20', 'd1ma20', 'd2ma20', 'd3ma20', 'ma50', 'd1ma50', 'd2ma50',
+                                'd3ma50', 'ma100', 'd1ma100', 'd2ma100', 'd3ma100', 'ma200',
+                                'd1ma200', 'd2ma200', 'd3ma200']
             self.names = dict([(name, i) for i, name in enumerate(column_name_list)])
             print('Adding Data For Stock %s' % symbol)
         except Exception:
             self.metrics = []
             self.ticker = ['No File']
             print('file: %s.csv' % symbol, 'can not add data  - In Class')
+
+    def derivatives(self, data):
+        roll_1 = np.roll(data, 1, 0)
+        roll_2 = np.roll(data, 2, 0)
+        roll_3 = np.roll(data, 3, 0)
+        d1 = roll_2 - 4 * roll_1 + 3 * data
+        d2 = roll_2 - 2 * roll_1 + data
+        d3 = -roll_3 + 3 * roll_2 - 3 * roll_1 + data
+        d1[0:3] = d1[3]
+        d2[0:3] = d2[3]
+        d3[0:3] = d3[3]
+        return d1, d2, d3
 
     def flip_data(self, data):
         return data[::-1, :]
@@ -308,6 +190,12 @@ class StockClass:
                 data[mask, rr] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask),
                     data[~mask, rr])
             return data
+
+    def gap(self, open, close, days):
+        close_roll = np.roll(close, days, 0)
+        gap = (open - close_roll) / close_roll
+        gap[:days] = gap[days]
+        return gap
 
     def moving_average(self, ma, data):
         csum = np.cumsum(np.insert(data, np.ones(ma + 1), 0))
@@ -334,6 +222,25 @@ class StockClass:
             monkey_bars[k, :] = top_five_prices
         monkey_bars[:30, :] = monkey_bars[30, :]
         return monkey_bars
+
+    def ohlcv(self, data):
+        open = data[:, 1]
+        open[open == 0] = 0.001
+        high = data[:, 2]
+        high[high == 0] = 0.001
+        low = data[:, 3]
+        low[low == 0] = 0.001
+        close = data[:, 4]
+        close[close == 0] = 0.001
+        volume = data[:, 6]
+        volume[volume == 0] = 0.001
+        return open, high, low, close, volume
+
+    def percent_change(self, open, close, days):
+        open_roll = np.roll(open, days, 0)
+        percent_change = (close - open_roll) / open_roll
+        percent_change[:days] = percent_change[days]
+        return percent_change
 
 
 def parse_csv(symbols):
@@ -363,14 +270,13 @@ def gather_tickers(ticker_list):
     return tickers
 
 
-def save_stocks(stocks):
-    file = open('stocks.obj', 'wb')
-    pickle.dump(stocks, file)
+def save_stocks(stocks, file):
+    file = open(file, 'wb')
+    joblib.dump(stocks, file)
 
 
-def load_stocks():
-    file = open('stocks.obj', 'rb')
-    stocks = pickle.load(file)
+def load_stocks(file):
+    stocks = joblib.load(file)
     return stocks
 
 
@@ -403,11 +309,11 @@ def make_labels_percent_gain(stocks, label, logic, label_pg_crit=0):
 def normalize_data(data):
     try:
         for i in range(data.shape[1]):
-            data[:, i] = data[:, i] / np.max(data[:, i])
-            data[:, i] = data[:, i] - np.mean(data[:, i])
+            data[:, i] = data[:, i] / np.max(np.abs(data[:, i]))
+            # data[:, i] = data[:, i] - np.mean(data[:, i])
     except IndexError:
-        data[:] = data[:] / np.max(data[:])
-        data[:] = data[:] - np.mean(data[:])
+        data[:] = data[:] / np.max(np.abs(data[:]))
+        # data[:] = data[:] - np.mean(data[:])
     return data
 
 
@@ -470,15 +376,15 @@ def populate_class(stocks, split1, split2):
             stocks[k].train_data = stocks[k].metrics[:split_idx1, :].copy()
             stocks[k].test_data = stocks[k].metrics[split_idx1:split_idx2, :].copy()
             stocks[k].trade_data = stocks[k].metrics[split_idx2:, :].copy()
-            norm_except = [col_data['percent_change'], col_data['percent_change1'],
-                           col_data['percent_change2'], col_data['percent_change3'],
-                           col_data['percent_change4'], col_data['open_diff'],
-                           col_data['high_diff'], col_data['low_diff'], col_data['close_diff'],
-                           col_data['open_diff2'], col_data['high_diff2'], col_data['low_diff2'],
-                           col_data['close_diff2'], col_data['open_diff3'], col_data['high_diff3'],
-                           col_data['low_diff3'], col_data['close_diff3'], col_data['open_diff4'],
-                           col_data['high_diff4'], col_data['low_diff4'], col_data['close_diff4'],
-                           col_data['gap1'], col_data['gap2'], col_data['gap3'], col_data['gap4']]
+            # norm_except = [col_data['percent_change'], col_data['percent_change1'],
+            #                col_data['percent_change2'], col_data['percent_change3'],
+            #                col_data['percent_change4'], col_data['open_diff'],
+            #                col_data['high_diff'], col_data['low_diff'], col_data['close_diff'],
+            #                col_data['open_diff2'], col_data['high_diff2'], col_data['low_diff2'],
+            #                col_data['close_diff2'], col_data['open_diff3'], col_data['high_diff3'],
+            #                col_data['low_diff3'], col_data['close_diff3'], col_data['open_diff4'],
+            #                col_data['high_diff4'], col_data['low_diff4'], col_data['close_diff4'],
+            #                col_data['gap1'], col_data['gap2'], col_data['gap3'], col_data['gap4']]
             norm_these = np.delete(np.arange(len(col_data)), norm_except)
             stocks[k].train_data[:, norm_these] = normalize_data(
                 stocks[k].train_data[:, norm_these])
