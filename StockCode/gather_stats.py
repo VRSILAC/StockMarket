@@ -1,8 +1,13 @@
 from trade_strats import *
 from scrapeData import *
 
-stocks = load_stocks('stocks_1000d.obj')
-
+stocks = load_stocks('stocks_500d.obj')
+# ticker_list = ['SP500_Labels.txt', 'Penny.txt', 'mid_cap.txt', 'test_list.txt', 'gold.txt']
+# prefix = 'C:\\Users\\carme\\Desktop\\TheProverbialCode\\StockMarket\\Ticker_Lists\\'
+# tickers = gather_tickers(prefix + ticker_list[3])
+# # download_quotes(tickers)
+# stocks = parse_csv(tickers)
+# stocks = clean_stock_list(stocks)
 
 def draw_box_plot(data, offset, edge_color, fill_color):
     pos = np.arange(data.shape[1]) + offset
