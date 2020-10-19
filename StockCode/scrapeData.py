@@ -6,9 +6,9 @@ import pickle
 import requests
 import datetime
 import numpy as np
-from sklearn.externals import joblib
+import joblib
 
-csv_location = 'C:/Users/carme/Desktop/TheProverbialCode/StockMarket/CSVFiles/'
+csv_location = '/home/carmelo/Documents/StockMarket/CSVFiles/'
 
 
 # s = 25
@@ -97,8 +97,8 @@ def download_quotes(symbols):
         symbol = symbols[i][0]
         if symbol + '.csv' not in csv_present:
             start_date = 0
+            # start_date = 1585724400
             append_to_file = 0
-            last_date = 0
             print("--------------------------------------------------")
             print("Downloading %s to %s.csv" % (symbol, symbol))
             waitbar(num_symbols, i)
@@ -111,12 +111,37 @@ def download_quotes(symbols):
                 os.remove(filename)
 
 
+def dq(symbol_in):
+    csv_present = os.listdir(csv_location)
+    symbol = symbol_in[0]
+    if symbol + '.csv' not in csv_present:
+        start_date = 0
+        # start_date = 1585724400
+        append_to_file = 0
+        print("--------------------------------------------------")
+        print("Downloading %s to %s.csv" % (symbol, symbol))
+        #waitbar(num_symbols, i)
+        end_date = get_now_epoch()
+        cookie, crumb = get_cookie_crumb(symbol)
+        tries = 0
+        tries = get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, tries)
+        filename = csv_location + '%s.csv' % (symbol)
+        if tries >= 5:
+            os.remove(filename)
+
+
+def download_parallel_quotes(symbols):
+    import multiprocessing
+    pool = multiprocessing.Pool(processes=5)
+    output = pool.map(dq, symbols)
+
+
 class StockClass:
     def __init__(self, symbol, sector, filename):
         try:
             data = np.genfromtxt(csv_location + symbol + '.csv', delimiter=',', skip_header=1,
-                converters={0: lambda s: (
-                    datetime.datetime.strptime(s.decode('ascii'), '%Y-%m-%d').timestamp())})
+                                 converters={0: lambda s: (
+                                     datetime.datetime.strptime(s.decode('ascii'), '%Y-%m-%d').timestamp())})
             self.ticker = [symbol]
             self.sector = [sector]
             data = self.filter_out_nan(data)
@@ -181,7 +206,7 @@ class StockClass:
             for rr in range(data.shape[1]):
                 mask = np.isnan(data[:, rr])
                 data[mask, rr] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask),
-                    data[~mask, rr])
+                                           data[~mask, rr])
             return data
 
     def gap(self, open, close, days):
@@ -276,7 +301,7 @@ def load_stocks(file):
 def make_labels_percent_gain(stocks, label, logic, label_pg_crit=0):
     for i in range(len(stocks)):
         if stocks[i].ticker[0][:] != 'No File':
-            idx = stocks[i].names['percent_change']
+            idx = stocks[i].names['gap']
             if not hasattr(stocks[i], 'label_pg'):
                 stocks[i].label_pg = np.zeros((len(stocks[i].metrics[:, 0]), 1))
                 stocks[i].label_pg_actual = np.zeros((len(stocks[i].metrics[:, 0]), 1))
@@ -308,6 +333,3 @@ def normalize_data(data):
         data[:] = data[:] / np.max(np.abs(data[:]))
         # data[:] = data[:] - np.mean(data[:])
     return data
-
-
-
