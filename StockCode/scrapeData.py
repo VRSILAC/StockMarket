@@ -7,6 +7,7 @@ import requests
 import datetime
 import numpy as np
 import joblib
+import traceback
 
 csv_location = '/home/carmelo/Documents/StockMarket/CSVFiles/'
 
@@ -112,6 +113,7 @@ def download_quotes(symbols):
 
 
 def dq(symbol_in):
+    # num_symbols =
     csv_present = os.listdir(csv_location)
     symbol = symbol_in[0]
     if symbol + '.csv' not in csv_present:
@@ -120,8 +122,10 @@ def dq(symbol_in):
         append_to_file = 0
         print("--------------------------------------------------")
         print("Downloading %s to %s.csv" % (symbol, symbol))
-        #waitbar(num_symbols, i)
+        # waitbar(num_symbols, len(csv_present))
         end_date = get_now_epoch()
+        # start_date = int(end_date - 500*24*3600)
+        # print('start date is 200 days back')
         cookie, crumb = get_cookie_crumb(symbol)
         tries = 0
         tries = get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, tries)
@@ -133,6 +137,7 @@ def dq(symbol_in):
 def download_parallel_quotes(symbols):
     import multiprocessing
     pool = multiprocessing.Pool(processes=5)
+    total = len(symbols)
     output = pool.map(dq, symbols)
 
 
@@ -182,6 +187,7 @@ class StockClass:
             self.names = dict([(name, i) for i, name in enumerate(column_name_list)])
             print('Adding Data For Stock %s' % symbol)
         except Exception:
+            print(traceback.format_exc())
             self.metrics = []
             self.ticker = ['No File']
             print('file: %s.csv' % symbol, 'can not add data  - In Class')
@@ -216,7 +222,7 @@ class StockClass:
         return gap
 
     def moving_average(self, ma, data):
-        csum = np.cumsum(np.insert(data, np.ones(ma + 1), 0))
+        csum = np.cumsum(np.insert(data, np.ones(ma + 1).astype('int'), 0))
         mavg = (csum[ma:] - csum[:-ma]) / float(ma)
         mavg = np.delete(mavg, 0)
         mavg[0] = mavg[1]
@@ -270,6 +276,7 @@ def parse_csv(symbols):
             if os.path.exists(filename):
                 stock.append(StockClass(symbols[i][0], symbols[i][1], filename))
         except Exception:
+            print(traceback.format_exc())
             print('file: %s.csv' % symbols[i][0], symbols[i][1], 'does not exist - In parse_csv')
     return stock
 
