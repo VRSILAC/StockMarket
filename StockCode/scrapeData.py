@@ -52,31 +52,6 @@ def get_cookie_crumb(symbol):
     return cookie, crumb
 
 
-def get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, tries):
-    filename = csv_location + '%s.csv' % (symbol)
-    url = "https://query1.finance.yahoo.com/v7/finance/download/%s?period1=%s&period2=%s&interval=1d&events=history&crumb=%s" % (
-        symbol, start_date, end_date, crumb)
-    response = requests.get(url, cookies=cookie, timeout=10)
-    handle = open(filename, 'wb')
-    count = 0
-    for block in response.iter_content(1024):
-        if block[0:1].decode('UTF-8') == '{':
-            tries += 1
-            print(str(tries) + ' Download Attempts')
-            cookie, crumb = get_cookie_crumb(symbol)
-            if tries > 5:
-                break
-            tries = get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, tries)
-        else:
-            tries = 0
-            if count == 0 and append_to_file == 1:
-                handle.write(block[42:])
-            else:
-                handle.write(block)
-    handle.close()
-    return tries
-
-
 def get_now_epoch():
     return int(time.time())
 
@@ -91,52 +66,77 @@ def waitbar(total, current):
     print(advance + retreat + ' ' + str(np.round(percent_complete, 3)) + '%', end='\r')
 
 
-def download_quotes(symbols):
-    num_symbols = len(symbols)
-    csv_present = os.listdir(csv_location)
-    for i in range(0, num_symbols):
-        symbol = symbols[i][0]
-        if symbol + '.csv' not in csv_present:
-            start_date = 0
-            # start_date = 1585724400
-            append_to_file = 0
-            print("--------------------------------------------------")
-            print("Downloading %s to %s.csv" % (symbol, symbol))
-            waitbar(num_symbols, i)
-            end_date = get_now_epoch()
+def get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, tries):
+    filename = csv_location + '%s.csv' % (symbol)
+    url = "https://query1.finance.yahoo.com/v7/finance/download/%s?period1=%s&period2=%s&interval=1d&events=history&crumb=%s" % (
+        symbol, start_date, end_date, crumb)
+    if tries==0:
+        print("--------------------------------------------------")
+        print("Downloading %s to %s.csv" % (symbol, symbol))
+    response = requests.get(url, cookies=cookie, timeout=10)
+    for block in response.iter_content(1024):
+        if block[0:1].decode('UTF-8') == '{':
+            tries += 1
+            print(str(tries) + ' Download Attempts')
             cookie, crumb = get_cookie_crumb(symbol)
-            tries = 0
+            if tries > 5:
+                break
             tries = get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, tries)
-            filename = csv_location + '%s.csv' % (symbol)
+        else:
+            tries = 0
+            break
+    if append_to_file and tries == 0:
+        try:
+            with open(filename, 'r') as open_file:
+                new_handle = bytes('\n'.join(open_file.read().split('\n')[:-3]) + '\n', 'utf-8')
+            with open(filename, 'wb') as new_csv:
+                new_csv.write(new_handle)
+                new_csv.write(block[42:])
+        except Exception:
+            os.remove(filename)
+            print(traceback.format_exc())
+    if not append_to_file and tries == 0:
+        with open(filename, 'wb') as handle:
+            for block in response.iter_content(1024):
+                handle.write(block)
+    return tries
+
+def dq(symbol_in):
+    csv_present = os.listdir(csv_location)
+    symbol = symbol_in[0]
+    filename = csv_location + '%s.csv' % (symbol)
+    end_date = get_now_epoch()
+    cookie, crumb = get_cookie_crumb(symbol)
+    tries = 0
+    # used to print download here
+    if symbol + '.csv' not in csv_present:
+        append_to_file = False
+        start_date = 0
+        tries = get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, tries)
+    else:
+        append_to_file = True
+        try:
+            with open(csv_location + symbol + '.csv', 'r') as current_csv:
+                actual_last_time = current_csv.read().split('\n')[-2].split(',')[0]
+        except IndexError:
+            os.remove(filename)
+            return
+        if actual_last_time != datetime.datetime.today().strftime('%Y-%m-%d'):
+            with open(csv_location + symbol + '.csv', 'r') as current_csv:
+                last_time = current_csv.read().split('\n')[-3].split(',')[0]
+            try:
+                start_date = int(datetime.datetime.timestamp(datetime.datetime.strptime(last_time, "%Y-%m-%d")))
+            except ValueError:
+                os.remove(filename)
+                return
+            tries = get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, tries)
             if tries >= 5:
                 os.remove(filename)
 
 
-def dq(symbol_in):
-    # num_symbols =
-    csv_present = os.listdir(csv_location)
-    symbol = symbol_in[0]
-    if symbol + '.csv' not in csv_present:
-        start_date = 0
-        # start_date = 1585724400
-        append_to_file = 0
-        print("--------------------------------------------------")
-        print("Downloading %s to %s.csv" % (symbol, symbol))
-        # waitbar(num_symbols, len(csv_present))
-        end_date = get_now_epoch()
-        # start_date = int(end_date - 500*24*3600)
-        # print('start date is 200 days back')
-        cookie, crumb = get_cookie_crumb(symbol)
-        tries = 0
-        tries = get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, tries)
-        filename = csv_location + '%s.csv' % (symbol)
-        if tries >= 5:
-            os.remove(filename)
-
-
 def download_parallel_quotes(symbols):
     import multiprocessing
-    pool = multiprocessing.Pool(processes=5)
+    pool = multiprocessing.Pool(12)#processes=multiprocessing.cpu_count())
     total = len(symbols)
     output = pool.map(dq, symbols)
 
@@ -185,7 +185,7 @@ class StockClass:
                                 'd3ma50', 'ma100', 'd1ma100', 'd2ma100', 'd3ma100', 'ma200',
                                 'd1ma200', 'd2ma200', 'd3ma200']
             self.names = dict([(name, i) for i, name in enumerate(column_name_list)])
-            print('Adding Data For Stock %s' % symbol)
+            print('Adding Data For %s' % symbol)
         except Exception:
             print(traceback.format_exc())
             self.metrics = []
