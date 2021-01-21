@@ -90,7 +90,7 @@ def get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, csv_lo
 def dq(symbol, list_location='', csv_location='', verbose=True):
     if list_location != '':
         waitbar(len(open(list_location, 'r').read().split('\n')),
-                len(open(''.join(list_location.split('.')[:-1])  + '_completed_list.txt', 'r').read().split('\n')))
+                len(open(''.join(list_location.split('.')[:-1]) + '_completed_list.txt', 'r').read().split('\n')))
     csv_present = os.listdir(csv_location)
     filename = csv_location + '%s.csv' % (symbol)
     present = symbol + '.csv' in csv_present
@@ -170,8 +170,16 @@ def parser():
     return parser.parse_args()
 
 
+def check_arguments_errors(args):
+    if not os.path.exists(args.csv_location):
+        raise (ValueError("Invalid csv_location path {}".format(os.path.abspath(args.config_file))))
+    if not os.path.exists(args.ticker_location):
+        raise (ValueError("Invalid ticker_location path {}".format(os.path.abspath(args.weights))))
+
+
 def main():
     args = parser()
+    check_arguments_errors(args)
     if args.single_ticker == '':
         tickers = gather_tickers(args.ticker_location)[:-1]
         download_parallel_quotes(tickers, args.ticker_location, args.csv_location, args.verbose)

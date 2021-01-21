@@ -15,13 +15,14 @@ warnings.filterwarnings('ignore')
 
 # np.set_printoptions(suppress=True)
 
-def compute_stats(buy_day, sell_day, buy_price, sell_price):
+def compute_stats(buy_day, sell_day, buy_price, sell_price, max_pc):
     try:
         buy_day = np.array(buy_day)
         sell_day = np.array(sell_day)
         buy_price = np.array(buy_price)
         sell_price = np.array(sell_price)
         apg_ = 100 * (sell_price - buy_price[:len(sell_price)]) / buy_price[:len(sell_price)]
+        apg_ = np.array([a if a<max_pc else max_pc for a in apg_])
         apg = np.round(np.mean(apg_), 2)
         wp = np.round(len(np.nonzero(apg_ > 0)[0]) / len(buy_day), 2)
         ahl = np.round(np.mean(sell_day - buy_day[:len(sell_day)]), 1)
@@ -79,18 +80,16 @@ def get_conditions(stock, conditions, day):
     return condition
 
 
-def plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks_traded_idx):
+def plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks_traded_idx, max_pc):
     plot_random = random.sample(stocks_traded_idx, 5) if len(stocks_traded_idx) > 5 else random.sample(
         stocks_traded_idx, len(stocks_traded_idx))
     for idx in plot_random:
         stock = stocks[idx]
-        # if stock.ticker[0][:] not in ['APT','DVAX','IG','PLAY','SGBX','VRTX']:
-        #     continue
         buy_day = buy_days[idx]
         sell_day = sell_days[idx]
         buy_price = buy_prices[idx]
         sell_price = sell_prices[idx]
-        apg_, apg, wp, history, ahl = compute_stats(buy_day, sell_day, buy_price, sell_price)
+        apg_, apg, wp, history, ahl = compute_stats(buy_day, sell_day, buy_price, sell_price, max_pc)
         if idx in plot_random:
             look_back = len(stock.metrics[:, 0])
             fig = plt.figure(figsize=(12, 6))
@@ -114,8 +113,8 @@ def plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks
     plt.show()
 
 
-## Excellent Long Strategy for Covid Market Conditions.
-def get_custom_condition_new(stock, day):
+# Excellent Long Strategy for Covid Market Conditions.
+def get_custom_condition(stock, day):
     c0 = np.mean(np.abs(stock.metrics[day - 10:day, stock.names['percent_change']])) > 0.05
     c1 = stock.metrics[day, stock.names['d2price']] < 0
     c2 = stock.metrics[day, stock.names['d2ma5']] < 0
@@ -129,26 +128,28 @@ def get_custom_condition_new(stock, day):
     return [c1, c2, c3, c4, c5, c6, c7, c8, c0]
 
 
-def get_custom_condition(stock, day):
-    opens = stock.metrics[day - 15:day, stock.names['open']]
-    close = stock.metrics[day, stock.names['close']]
-    pc1 = (close - opens) / opens
-    avg_pc1 = np.mean(np.abs(pc1))
-    avg_pc1_con = -0.3  # * avg_pc1
-    c1 = any(pc1 < avg_pc1_con)
-    c2 = stock.metrics[day, stock.names['gap']] > 0
-    c3 = stock.metrics[day, stock.names['percent_change']] < 0
-    c4 = stock.metrics[day, stock.names['gap']] < 0.1
-    c5 = avg_pc1 > 0.05
-    c6 = stock.metrics[day + 1, stock.names['gap']] >= 0
-    c7 = stock.moving_average(10, stock.metrics[day - 10:day, stock.names['volume']])[-1] > 1E6
-    c8 = stock.metrics[day + 1, stock.names['gap']] < 0.1
-
-    c9 = stock.metrics[day, stock.names['open']] < 10
-    c10 = stock.metrics[day, stock.names['open']] > 0.05
-
-    # c11 = np.mean(np.abs(pc1[-3:])) < avg_pc1
-    return [c1, c2, c3, c4, c5, c6, c7, c8, c9, c10]  # , c11]
+# def get_custom_condition(stock, day):
+#     opens = stock.metrics[day - 15:day, stock.names['open']]
+#     close = stock.metrics[day, stock.names['close']]
+#     pc1 = (close - opens) / opens
+#     avg_pc1 = np.mean(np.abs(pc1))
+#     avg_pc1_con = -0.3  # * avg_pc1
+#     c1 = any(pc1 < avg_pc1_con)
+#     c2 = stock.metrics[day, stock.names['gap']] > 0
+#     c3 = stock.metrics[day, stock.names['percent_change']] < 0
+#     c4 = stock.metrics[day, stock.names['gap']] < 0.1
+#     c5 = avg_pc1 > 0.05
+#     c6 = stock.metrics[day + 1, stock.names['gap']] >= 0
+#     c7 = stock.moving_average(10, stock.metrics[day - 10:day, stock.names['volume']])[-1] > 1E6
+#     c8 = stock.metrics[day + 1, stock.names['gap']] < 0.1
+#     ##
+#     c9 = stock.metrics[day, stock.names['open']] < 10
+#     c10 = stock.metrics[day, stock.names['open']] > 0.05
+#     ##
+#     # c11 = stock.metrics[day, stock.names['ma5']] < stock.metrics[day, stock.names['ma50']]
+#     # c12 = any(stock.metrics[day-15:day, stock.names['gap']] < -avg_pc1)
+#     # c11 = np.mean(np.abs(pc1[-3:])) < avg_pc1
+#     return [c1, c2, c3, c4, c5, c6, c7, c8, c9, c10]
 
 
 def get_ohlc(stock, day):
@@ -160,6 +161,7 @@ def get_ohlc(stock, day):
 
 
 def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=False, days_back=20):
+    max_pc = 20
     stats = []
     tickers = []
     buy_days = []
@@ -188,8 +190,8 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
         while day < -1:
             pct_range = np.mean(np.abs(stock.metrics[day - 10:day, stock.names['percent_change']]))
             take_gain_percent = np.min([1 + pct_range * 3, 1.2])
-            stop_loss_percent = np.max([1 - pct_range * 3, 0.9])
-            stop_loss_percent2 = np.max([1 - pct_range * 3, 0.9])
+            stop_loss_percent = np.max([1 - pct_range * 2, 0.9])
+            stop_loss_percent2 = np.max([1 - pct_range * 2, 0.9])
             if model_type == '2DCNN':
                 prd = model.predict_classes(
                     np.expand_dims(np.expand_dims(stock.trade_data_tensor[day, :, :], axis=2), axis=0))
@@ -256,7 +258,7 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
         sell_days.append(sell_day)
         buy_prices.append(buy_price)
         sell_prices.append(sell_price)
-        apg_, apg, wp, history, ahl = compute_stats(buy_day, sell_day, buy_price, sell_price)
+        apg_, apg, wp, history, ahl = compute_stats(buy_day, sell_day, buy_price, sell_price, max_pc)
         try:
             if all(apg_ < 100):
                 stats.append([apg, wp, len(buy_day), ahl, np.round(history[0][-1], 2)])
@@ -270,8 +272,8 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
     current_trades = [stocks[cti].ticker[0] + '  ' for cti in current_trades_idx]
     print_stats(stats, tickers)
     print('Current Trades: ' + ''.join(current_trades))
-    # plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks_traded_idx)
-    plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, current_trades_idx)
+    plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks_traded_idx, max_pc)
+    # plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, current_trades_idx, max_pc)
     return buy_days, sell_days, buy_prices, sell_prices, stats
 
 

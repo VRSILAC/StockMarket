@@ -231,8 +231,16 @@ def parser():
     return parser.parse_args()
 
 
+def check_arguments_errors(args):
+    if not os.path.exists(args.csv_location):
+        raise(ValueError("Invalid csv_location path {}".format(os.path.abspath(args.config_file))))
+    if not os.path.exists(args.ticker_location):
+        raise(ValueError("Invalid ticker_location path {}".format(os.path.abspath(args.weights))))
+
+
 def main():
     args = parser()
+    check_arguments_errors(args)
     tickers = gather_tickers(args.ticker_location)[:-1]
     s = parse_csv(tickers, args.csv_location)
     s = clean_stock_list(s)
