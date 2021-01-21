@@ -1,7 +1,7 @@
 from multiprocessing import Pool
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
-from scrapeData import *
+from process_data import *
 from candle import *
 import numpy as np
 import warnings
@@ -92,71 +92,41 @@ def plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks
         sell_price = sell_prices[idx]
         apg_, apg, wp, history, ahl = compute_stats(buy_day, sell_day, buy_price, sell_price)
         if idx in plot_random:
-            # look_back = 1000 if len(stock.metrics[:, 0]) > 1000 else len(stock.metrics[:, 0])
             look_back = len(stock.metrics[:, 0])
             fig = plt.figure(figsize=(12, 6))
             fig.patch.set_facecolor('xkcd:gray')
             gs = gridspec.GridSpec(4, 1)
-            ax1 = plt.subplot(gs[:3])
+            ax1 = plt.subplot(gs[:4])
             ax1.set_facecolor('xkcd:gray')
             open = stock.metrics[-look_back:, 0]
             high = stock.metrics[-look_back:, 1]
             low = stock.metrics[-look_back:, 2]
             close = stock.metrics[-look_back:, 3]
             candle(ax1, open, high, low, close, colorup="cyan", colordown="red", width=.4)
-            plt.plot(np.array(buy_day[:len(sell_day)]), np.array(buy_price[:len(sell_day)]), 'g.',
-                     markersize='15')
+            plt.plot(np.array(buy_day), np.array(buy_price), 'g.', markersize='15')
             plt.plot(np.array(sell_day), np.array(sell_price), 'r.', markersize='15')
-            ax1.set_title(stock.ticker[0][:] + '  APG: ' + str(apg) + ' WP: ' + str(
-                wp) + ' NumTrades: ' + str(len(buy_day)) + ' AHL: ' + str(ahl) + ' $' + str(
-                '{:.2f}'.format(history[0][-1])))
-            # ax2 = plt.subplot(gs[2])
-            # ax2.set_facecolor('xkcd:gray')
-            # plt.plot(apg_, 'k')
-            [c1, c2, c3, c4, c5, c6, c7] = get_custom_condition_vals(stock, buy_day[-1] - 1)
-            ax3 = plt.subplot(gs[3])
-            ax3.set_facecolor('xkcd:gray')
-            plt.plot(c1, 'k', label=str(c1))
-            plt.plot(c2, 'r', label=str(c2))
-            plt.plot(c3, 'b', label=str(c3))
-            plt.plot(c4, 'g', label=str(c4))
-            plt.plot(c5, 'm', label=str(c5))
-            plt.plot(c6, 'y', label=str(c6))
-            plt.plot(c7, 'o', label=str(c7))
-            plt.legend()
-            # plt.plot(history[1], 'b')
+            try:
+                ax1.set_title(stock.ticker[0][:] + '  APG: ' + str(apg) + ' WP: ' + str(wp) + ' NumTrades: ' + str(
+                    len(buy_day)) + ' AHL: ' + str(ahl) + ' $' + str('{:.2f}'.format(history[0][-1])))
+            except Exception:
+                ax1.set_title('Current Trade: ' + stock.ticker[0][:])
             plt.subplots_adjust(hspace=0.4)
     plt.show()
 
 
 ## Excellent Long Strategy for Covid Market Conditions.
-# def get_custom_condition(stock, day):
-#     opens = stock.metrics[day - 15:day, stock.names['open']]
-#     close = stock.metrics[day, stock.names['close']]
-#     pc1 = (close - opens) / opens
-#     c1 = any(pc1 < -0.5)
-#     c2 = stock.metrics[day, stock.names['gap']] > 0
-#     c3 = stock.metrics[day, stock.names['percent_change']] < 0
-#     c4 = stock.metrics[day, stock.names['gap']] < 0.1
-#     c5 = np.mean(np.abs(pc1)) > 0.05
-#     c6 = stock.metrics[day + 1, stock.names['gap']] >= 0
-#     c7 = stock.moving_average(10, stock.metrics[day - 10:day, stock.names['volume']])[-1] > 1E6
-#     return [c1, c2, c3, c4, c5, c6, c7]
+def get_custom_condition_new(stock, day):
+    c0 = np.mean(np.abs(stock.metrics[day - 10:day, stock.names['percent_change']])) > 0.05
+    c1 = stock.metrics[day, stock.names['d2price']] < 0
+    c2 = stock.metrics[day, stock.names['d2ma5']] < 0
+    c3 = stock.metrics[day, stock.names['d3ma5']] > 0
+    c4 = stock.metrics[day, stock.names['d2ma20']] < 0
+    c5 = stock.metrics[day, stock.names['percent_change']] < 0
+    c6 = stock.metrics[day + 1, stock.names['gap']] < 0
+    c7 = stock.metrics[day + 1, stock.names['gap']] > -0.1
+    c8 = stock.metrics[day, stock.names['open']] < 10
 
-def get_custom_condition_vals(stock, day):
-    opens = stock.metrics[day - 15:day, stock.names['open']]
-    close = stock.metrics[day, stock.names['close']]
-    pc1 = (close - opens) / opens
-    avg_pc1 = np.mean(np.abs(pc1))
-    c1 = any(pc1 < -3 * avg_pc1)
-    c2 = stock.metrics[day, stock.names['gap']]
-    c4 = stock.metrics[day, stock.names['percent_change']]
-    c3 = stock.metrics[day, stock.names['gap']]
-    c5 = avg_pc1
-    c6 = stock.metrics[day + 1, stock.names['gap']]
-    c7 = stock.moving_average(10, stock.metrics[day - 10:day, stock.names['volume']])[-1] > 1E6
-    # c8 = stock.metrics[day, stock.names['open']] < stock.metrics[day,stock.names['ma20']]
-    return [c1, c2, c3, c4, c5, c6, c7]
+    return [c1, c2, c3, c4, c5, c6, c7, c8, c0]
 
 
 def get_custom_condition(stock, day):
@@ -164,15 +134,19 @@ def get_custom_condition(stock, day):
     close = stock.metrics[day, stock.names['close']]
     pc1 = (close - opens) / opens
     avg_pc1 = np.mean(np.abs(pc1))
-    c1 = any(pc1 < -3 * avg_pc1)
+    avg_pc1_con = -0.3  # * avg_pc1
+    c1 = any(pc1 < avg_pc1_con)
     c2 = stock.metrics[day, stock.names['gap']] > 0
     c3 = stock.metrics[day, stock.names['percent_change']] < 0
     c4 = stock.metrics[day, stock.names['gap']] < 0.1
     c5 = avg_pc1 > 0.05
     c6 = stock.metrics[day + 1, stock.names['gap']] >= 0
     c7 = stock.moving_average(10, stock.metrics[day - 10:day, stock.names['volume']])[-1] > 1E6
-    c8 = stock.metrics[day, stock.names['open']] < stock.metrics[day, stock.names['ma50']]
-    return [c1, c2, c3, c4, c5, c6, c7, c8]
+    c8 = stock.metrics[day + 1, stock.names['gap']] < 0.1
+
+    c9 = stock.metrics[day, stock.names['open']] < 10
+    c10 = stock.metrics[day, stock.names['open']] > 0.05
+    return [c1, c2, c3, c4, c5, c6, c7, c8, c9, c10]
 
 
 def get_ohlc(stock, day):
@@ -183,13 +157,15 @@ def get_ohlc(stock, day):
     return open, high, low, close
 
 
-def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=False):
+def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=False, days_back=20):
     stats = []
     tickers = []
     buy_days = []
     sell_days = []
     buy_prices = []
     sell_prices = []
+    current_trades = []
+    current_trades_idx = []
     stocks_traded_idx = []
     total = len(stocks)
     for idx, stock in enumerate(stocks):
@@ -202,16 +178,16 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
             stock.metrics = stock.metrics[-look_back:, :]
         else:
             look_back = len(stock.metrics[:, 0])
-        day = -look_back + 60
+        day = -look_back + 11 if days_back == -1 else -days_back
         buy_day = []
         sell_day = []
         buy_price = []
         sell_price = []
         while day < -2:
             pct_range = np.mean(np.abs(stock.metrics[day - 10:day, stock.names['percent_change']]))
-            take_gain_percent = 1 + pct_range * 3
-            stop_loss_percent = 1 - pct_range * 3
-            stop_loss_percent2 = 1 - pct_range * 3
+            take_gain_percent = np.min([1 + pct_range * 3, 1.2])
+            stop_loss_percent = np.max([1 - pct_range * 3, 0.9])
+            stop_loss_percent2 = np.max([1 - pct_range * 3, 0.9])
             if model_type == '2DCNN':
                 prd = model.predict_classes(
                     np.expand_dims(np.expand_dims(stock.trade_data_tensor[day, :, :], axis=2), axis=0))
@@ -224,9 +200,9 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
             if all(condition):
                 # if np.count_nonzero(condition) >= len(condition) - 1:
                 day += 1
-                open, high, low, close = get_ohlc(stock, day)
+                open_, high, low, close = get_ohlc(stock, day)
                 buy_day.append(look_back + day)
-                buy_price.append(open)
+                buy_price.append(open_)
                 try:
                     hard_stop_val = np.min(stock.metrics[day - 10:day, stock.names['low']])
                 except:
@@ -239,23 +215,24 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
                     sell_price.append(take_gain_percent * buy_price[-1])
                     sell_day.append(look_back + day)
                 elif day_trade:
-                    sell_price.append(stock.metrics[day, close])
+                    sell_price.append(close)
                     sell_day.append(look_back + day)
                 else:
-                    current_high = np.max([open, close])
+                    current_high = np.max([open_, close])
                     stop_loss = hard_stop_val if hard_stop else stop_loss_percent2 * current_high
                     while True:
                         day += 1
-                        open, high, low, close = get_ohlc(stock, day)
+                        open_, high, low, close = get_ohlc(stock, day)
                         if not day < -1:
+                            current_trades_idx.append(idx)
                             break
                         # condition = get_custom_condition(stock, day)
-                        if open <= stop_loss:
-                            sell_price.append(open)
+                        if open_ <= stop_loss:
+                            sell_price.append(open_)
                             sell_day.append(look_back + day)
                             break
-                        if open >= buy_price[-1] * take_gain_percent:
-                            sell_price.append(open)
+                        if open_ >= buy_price[-1] * take_gain_percent:
+                            sell_price.append(open_)
                             sell_day.append(look_back + day)
                             break
                         if low <= stop_loss:
@@ -266,8 +243,8 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
                             sell_price.append(buy_price[-1] * take_gain_percent)
                             sell_day.append(look_back + day)
                             break
-                        if open > current_high:
-                            current_high = open
+                        if open_ > current_high:
+                            current_high = open_
                         if close > current_high:
                             current_high = close
                         stop_loss = hard_stop_val if hard_stop else stop_loss_percent2 * current_high
@@ -288,8 +265,11 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
         tickers.append(stock.ticker[0][:])
         if len(sell_day) > 0:
             stocks_traded_idx.append(idx)
+    current_trades = [stocks[cti].ticker[0] + '  ' for cti in current_trades_idx]
     print_stats(stats, tickers)
+    print('Current Trades: ' + ''.join(current_trades))
     plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks_traded_idx)
+    # plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, current_trades_idx)
     return buy_days, sell_days, buy_prices, sell_prices, stats
 
 

@@ -1,4 +1,4 @@
-from scrapeData import *
+from scrape_data import *
 import keras
 from keras.models import load_model
 from keras.utils import to_categorical
@@ -146,27 +146,26 @@ def make_1d_ann(train, test, load_nn_model=0, model_name=''):
     n_outputs = 2
     model = Sequential()
     model.add(Dense(n_inputs, input_dim=n_inputs, activation='relu'))
-    model.add(Dense(100, activation='relu'))
+    model.add(Dense(n_inputs * 2, activation='relu'))
     model.add(Dropout(0.4))
+    model.add(Dense(n_inputs, activation='relu'))
     model.add(Dense(n_outputs))
-    omt = keras.optimizers.Adam(lr=0.005)
+    omt = keras.optimizers.Adam(lr=0.001)
     loss = 'binary_crossentropy'
     model.compile(loss=loss, optimizer=omt, metrics=['binary_accuracy'])
     es = EarlyStopping(monitor='val_loss', patience=10)
     history = model.fit(train_data, train_labels, epochs=500,
-        batch_size=int(len(test_labels) * 0.01), verbose=True, shuffle=True,
-        validation_data=(test_data, test_labels), callbacks=[es])
+                        batch_size=int(len(test_labels) * 0.01), verbose=True, shuffle=True,
+                        validation_data=(test_data, test_labels), callbacks=[es])
     scoresTest = model.evaluate(test_data, test_labels, verbose=0)
     prd = model.predict_classes(test_data)
     print(np.column_stack((prd, test_labels)))
-    print(
-        str(model.metrics_names[1]) + ' %.2f%%' % (scoresTest[1] * 100) + ' accuracy on test data')
+    print(str(model.metrics_names[1]) + ' %.2f%%' % (scoresTest[1] * 100) + ' accuracy on test data')
     if load_nn_model == 1:
         model = load_model(model_name + '.h5')
         scoresTest = model.evaluate(test_data, test_labels, verbose=0)
         prd = model.predict_classes(test_data)
-        print(str(model.metrics_names[1]) + ' %.2f%%' % (
-                scoresTest[1] * 100) + ' accuracy on test data')
+        print(str(model.metrics_names[1]) + ' %.2f%%' % (scoresTest[1] * 100) + ' accuracy on test data')
     return model, history
 
 
@@ -180,8 +179,7 @@ def make_2d_cnn(train, test, h, load_nn_model=0, model_name=''):
     n_inputs = train_data.shape[1]
     n_outputs = 2
     model = Sequential()
-    model.add(Conv2D(8, kernel_size=(10, 10), strides=(1, 1), activation='relu',
-        input_shape=(h, n_inputs, 1)))
+    model.add(Conv2D(8, kernel_size=(10, 10), strides=(1, 1), activation='relu', input_shape=(h, n_inputs, 1)))
     model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
     model.add(BatchNormalization())
     model.add(Dropout(0.2))
@@ -196,8 +194,8 @@ def make_2d_cnn(train, test, h, load_nn_model=0, model_name=''):
     es = EarlyStopping(monitor='val_loss', patience=10)
     batch_size = int(len(test_labels) * 0.01) if len(test_labels) > 100 else len(test_labels)
     history = model.fit(train_data, train_labels, epochs=100,
-        batch_size=batch_size, verbose=True, shuffle=False,
-        validation_data=(test_data, test_labels), callbacks=[es])
+                        batch_size=batch_size, verbose=True, shuffle=False,
+                        validation_data=(test_data, test_labels), callbacks=[es])
     scoresTest = model.evaluate(test_data, test_labels, verbose=0)
     prd = model.predict_classes(test_data)
     print(np.column_stack((prd, test_labels)))
