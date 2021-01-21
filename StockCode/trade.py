@@ -1,7 +1,26 @@
 from trade_strats import *
 from process_data import *
-stocks = load_stocks('stocks_100d.obj')
-# use days_back=-1 for full range
-bd, sd, bp, sp, stats = swing_(stocks, day_trade=False, hard_stop=False, model_type='Custom', days_back=20)
 
 
+def parser():
+    parser = argparse.ArgumentParser(description='Stock Market Ticker Downloader')
+    parser.add_argument("--day_trade", default=False, type=bool, help="sell stocks on same day")
+    parser.add_argument("--hard_stop", default=False, type=bool,
+                        help="use hard_stop to use stop loss as min price over last 10 days")
+    parser.add_argument("--model", default='Custom', type=str,
+                        help="use model_type 'Custom' always (for now)")
+    parser.add_argument("--days_back", default=20, type=int, help="use days_back=-1 for full range")
+    parser.add_argument("--dataset", default='/home/carmelo/Documents/StockMarket/StockCode/stocks_100d.obj', type=str,
+                        help="path pointing to processed stock data")
+    return parser.parse_args()
+
+
+def main():
+    args = parser()
+    stocks = load_stocks(args.dataset)
+    bd, sd, bp, sp, stats = swing_(stocks, day_trade=args.day_trade, hard_stop=args.hard_stop, model_type=args.model,
+                                   days_back=args.days_back)
+
+
+if __name__ == '__main__':
+    main()

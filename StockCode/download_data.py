@@ -90,7 +90,7 @@ def get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, csv_lo
 def dq(symbol, list_location='', csv_location='', verbose=True):
     if list_location != '':
         waitbar(len(open(list_location, 'r').read().split('\n')),
-                len(open(list_location + 'completed_list.txt', 'r').read().split('\n')))
+                len(open(''.join(list_location.split('.')[:-1])  + '_completed_list.txt', 'r').read().split('\n')))
     csv_present = os.listdir(csv_location)
     filename = csv_location + '%s.csv' % (symbol)
     present = symbol + '.csv' in csv_present
@@ -124,11 +124,11 @@ def dq(symbol, list_location='', csv_location='', verbose=True):
         attempts += 1
     if verbose and data_saved: print(symbol + ' Download Successful')
     if data_saved and list_location != '':
-        with open(list_location + 'completed_list.txt', 'a') as complete:
+        with open(''.join(list_location.split('.')[:-1]) + '_completed_list.txt', 'a') as complete:
             complete.write('\n' + symbol)
     if verbose and not data_saved: print(symbol + ' Download Successful')
     if not data_saved and list_location != '':
-        with open(list_location + 'failed_list.txt', 'a') as failed:
+        with open(''.join(list_location.split('.')[:-1]) + '_failed_list.txt', 'a') as failed:
             failed.write('\n' + symbol)
 
 
@@ -140,10 +140,10 @@ def gather_tickers(ticker_list):
 
 
 def download_parallel_quotes(symbols, list_location, csv_location, verbose):
-    with open(list_location + 'completed_list.txt', 'w') as complete:
-        complete.write('')
-    with open(list_location + 'failed_list.txt', 'w') as failed:
-        failed.write('')
+    with open(''.join(list_location.split('.')[:-1]) + '_completed_list.txt', 'w') as complete:
+        pass
+    with open(''.join(list_location.split('.')[:-1]) + '_failed_list.txt', 'w') as failed:
+        pass
     pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
     dfunc = partial(dq, list_location=list_location, csv_location=csv_location, verbose=verbose)
     output = pool.map(dfunc, symbols)

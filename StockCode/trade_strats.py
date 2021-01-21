@@ -146,7 +146,9 @@ def get_custom_condition(stock, day):
 
     c9 = stock.metrics[day, stock.names['open']] < 10
     c10 = stock.metrics[day, stock.names['open']] > 0.05
-    return [c1, c2, c3, c4, c5, c6, c7, c8, c9, c10]
+
+    # c11 = np.mean(np.abs(pc1[-3:])) < avg_pc1
+    return [c1, c2, c3, c4, c5, c6, c7, c8, c9, c10]  # , c11]
 
 
 def get_ohlc(stock, day):
@@ -183,7 +185,7 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
         sell_day = []
         buy_price = []
         sell_price = []
-        while day < -2:
+        while day < -1:
             pct_range = np.mean(np.abs(stock.metrics[day - 10:day, stock.names['percent_change']]))
             take_gain_percent = np.min([1 + pct_range * 3, 1.2])
             stop_loss_percent = np.max([1 - pct_range * 3, 0.9])
@@ -223,7 +225,7 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
                     while True:
                         day += 1
                         open_, high, low, close = get_ohlc(stock, day)
-                        if not day < -1:
+                        if not day < -0:
                             current_trades_idx.append(idx)
                             break
                         # condition = get_custom_condition(stock, day)
@@ -268,8 +270,8 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
     current_trades = [stocks[cti].ticker[0] + '  ' for cti in current_trades_idx]
     print_stats(stats, tickers)
     print('Current Trades: ' + ''.join(current_trades))
-    plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks_traded_idx)
-    # plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, current_trades_idx)
+    # plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks_traded_idx)
+    plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, current_trades_idx)
     return buy_days, sell_days, buy_prices, sell_prices, stats
 
 
