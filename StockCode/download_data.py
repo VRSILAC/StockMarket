@@ -162,8 +162,9 @@ def parser():
                         help="path pointing to a list of tickers to download. must be from text file. tickers seperated by newline")
     parser.add_argument("--csv_location", default='/home/carmelo/Documents/StockMarket/CSVFiles/',
                         help="path pointing to location to save csv files, ex. /home/user/Desktop/CSVFiles/")
-    parser.add_argument("--single_ticker", default='', type=str,
-                        help="download data for a single ticker. input as string, ex. 'GOOG'. works when not pointing to a list of tickers already")
+    parser.add_argument("--ticker_string", default='', type=str,
+                        help="download data for a single ticker, or string of tickers. input as string, ex. 'GOOG', or 'GOOG,AAPL,TSLA'."
+                             " separate by commas only. works when not pointing to a list of tickers already")
     parser.add_argument("--verbose", default=True, type=bool,
                         help="print status of downloading or not")
     return parser.parse_args()
