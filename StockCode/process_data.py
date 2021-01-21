@@ -8,14 +8,14 @@ import datetime
 import numpy as np
 import joblib
 import traceback
+import argparse
 
 
 class StockClass:
-    def __init__(self, symbol, filename):
+    def __init__(self, symbol, csv_location):
         try:
-            data = np.genfromtxt(csv_location + symbol + '.csv', delimiter=',', skip_header=1,
-                                 converters={0: lambda s: (
-                                     datetime.datetime.strptime(s.decode('ascii'), '%Y-%m-%d').timestamp())})
+            data = np.genfromtxt(csv_location + symbol + '.csv', delimiter=',', skip_header=1, converters={
+                0: lambda s: (datetime.datetime.strptime(s.decode('ascii'), '%Y-%m-%d').timestamp())})
             self.ticker = [symbol]
             data = self.filter_out_nan(data)
             open_, high, low, close, volume = self.ohlcv(data)
@@ -144,7 +144,7 @@ def parse_csv(symbols, csv_location):
         try:
             filename = csv_location + '%s.csv' % (symbols[i])
             if os.path.exists(filename):
-                stock.append(StockClass(symbols[i], filename))
+                stock.append(StockClass(symbols[i], csv_location))
         except Exception:
             print(traceback.format_exc())
             print('file: %s.csv' % symbols[i], 'does not exist - In parse_csv')
@@ -220,12 +220,21 @@ def waitbar(total, current):
     print(advance + retreat + ' ' + str(np.round(percent_complete, 3)) + '%', end='\r')
 
 
-if __name__ == '__main__':
-    ticker_list = ['tickers.txt', 'test_list.txt']
-    prefix = '/home/carmelo/Documents/StockMarket/Ticker_Lists/'
-    csv_location = '/home/carmelo/Documents/StockMarket/CSVFiles/'
-    tickers = gather_tickers(prefix + ticker_list[0])[:-1]
-    s = parse_csv(tickers, csv_location)
+def parser():
+    parser = argparse.ArgumentParser(description='Stock Market Ticker Downloader')
+    parser.add_argument("--ticker_location",
+                        default='/home/carmelo/Documents/StockMarket/Ticker_Lists/tickers.txt',
+                        help="path pointing to a list of tickers to download. must be from text file. tickers seperated by newline")
+    parser.add_argument("--csv_location", default='/home/carmelo/Documents/StockMarket/CSVFiles/',
+                        help="path pointing to location to save csv files, ex. /home/user/Desktop/CSVFiles/")
+    parser.add_argument("--verbose", default=True, type=bool, help="print status of downloading or not")
+    return parser.parse_args()
+
+
+def main():
+    args = parser()
+    tickers = gather_tickers(args.ticker_location)[:-1]
+    s = parse_csv(tickers, args.csv_location)
     s = clean_stock_list(s)
     save_stocks(s, 'stocks.obj')
     do_days = [500, 250, 100]
@@ -239,8 +248,12 @@ if __name__ == '__main__':
                     stocks.extend([stock])
                     t.append(stock.ticker[0])
                 else:
-                    print('Duplicate')
+                    if args.verbose: print('Duplicate')
             save_stocks(stocks, 'stocks_' + str(day) + 'd.obj')
         except Exception:
             print(traceback.format_exc())
             pass
+
+
+if __name__ == '__main__':
+    main()

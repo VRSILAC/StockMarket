@@ -3,7 +3,10 @@ import os
 import time
 import requests
 import datetime
+import argparse
 import numpy as np
+import multiprocessing
+from functools import partial
 
 
 def split_crumb_store(v):
@@ -55,7 +58,7 @@ def waitbar(total, current):
     print(advance + retreat + ' ' + str(np.round(percent_complete, 3)) + '%', end='\r')
 
 
-def get_data(symbol, start_date, end_date, cookie, crumb, append_to_file):
+def get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, csv_location):
     filename = csv_location + '%s.csv' % (symbol)
     url = "https://query1.finance.yahoo.com/v7/finance/download/%s?period1=%s&period2=%s&interval=1d&events=history&crumb=%s" % (
         symbol, start_date, end_date, crumb)
@@ -84,9 +87,10 @@ def get_data(symbol, start_date, end_date, cookie, crumb, append_to_file):
     return False
 
 
-def dq(symbol, verbose=False):
-    waitbar(len(open(list_location + ticker_list[0], 'r').read().split('\n')),
-            len(open(list_location + 'completed_list.txt', 'r').read().split('\n')))
+def dq(symbol, list_location='', csv_location='', verbose=True):
+    if list_location != '':
+        waitbar(len(open(list_location, 'r').read().split('\n')),
+                len(open(list_location + 'completed_list.txt', 'r').read().split('\n')))
     csv_present = os.listdir(csv_location)
     filename = csv_location + '%s.csv' % (symbol)
     present = symbol + '.csv' in csv_present
@@ -114,16 +118,16 @@ def dq(symbol, verbose=False):
     data_saved = False
     attempts = 0
     while attempts < 5 and not data_saved:
-        data_saved = get_data(symbol, start_date, end_date, cookie, crumb, append_to_file)
+        data_saved = get_data(symbol, start_date, end_date, cookie, crumb, append_to_file, csv_location)
         if data_saved == False:
             cookie, crumb = get_cookie_crumb(symbol)
         attempts += 1
-    if data_saved:
-        if verbose: print(symbol + ' download successful')
+    if verbose and data_saved: print(symbol + ' Download Successful')
+    if data_saved and list_location != '':
         with open(list_location + 'completed_list.txt', 'a') as complete:
             complete.write('\n' + symbol)
-    else:
-        if verbose: print(symbol + ' download failed')
+    if verbose and not data_saved: print(symbol + ' Download Successful')
+    if not data_saved and list_location != '':
         with open(list_location + 'failed_list.txt', 'a') as failed:
             failed.write('\n' + symbol)
 
@@ -135,26 +139,44 @@ def gather_tickers(ticker_list):
     return tickers
 
 
-def download_parallel_quotes(symbols):
-    from functools import partial
-    import multiprocessing
+def download_parallel_quotes(symbols, list_location, csv_location, verbose):
     with open(list_location + 'completed_list.txt', 'w') as complete:
         complete.write('')
     with open(list_location + 'failed_list.txt', 'w') as failed:
         failed.write('')
     pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
-    dfunc = partial(dq, verbose=True)
+    dfunc = partial(dq, list_location=list_location, csv_location=csv_location, verbose=verbose)
     output = pool.map(dfunc, symbols)
 
 
-def download_quotes(symbols):
+def download_quotes(symbols, csv_location, verbose):
+    symbols = list(symbols.split(','))
     for symbol in symbols:
-        dq(symbol)
+        dq(symbol, csv_location=csv_location, verbose=verbose)
 
 
-ticker_list = ['tickers.txt', 'test_list.txt']
-list_location = '/home/carmelo/Documents/StockMarket/Ticker_Lists/'
-csv_location = '/home/carmelo/Documents/StockMarket/CSVFiles/'
-download_list = ticker_list[0]
-tickers = gather_tickers(list_location + download_list)[:-1]
-download_parallel_quotes(tickers)
+def parser():
+    parser = argparse.ArgumentParser(description='Stock Market Ticker Downloader')
+    parser.add_argument("--ticker_location",
+                        default='/home/carmelo/Documents/StockMarket/Ticker_Lists/tickers.txt',
+                        help="path pointing to a list of tickers to download. must be from text file. tickers seperated by newline")
+    parser.add_argument("--csv_location", default='/home/carmelo/Documents/StockMarket/CSVFiles/',
+                        help="path pointing to location to save csv files, ex. /home/user/Desktop/CSVFiles/")
+    parser.add_argument("--single_ticker", default='', type=str,
+                        help="download data for a single ticker. input as string, ex. 'GOOG'. works when not pointing to a list of tickers already")
+    parser.add_argument("--verbose", default=True, type=bool,
+                        help="print status of downloading or not")
+    return parser.parse_args()
+
+
+def main():
+    args = parser()
+    if args.single_ticker == '':
+        tickers = gather_tickers(args.ticker_location)[:-1]
+        download_parallel_quotes(tickers, args.ticker_location, args.csv_location, args.verbose)
+    else:
+        download_quotes(args.single_ticker, args.csv_location, args.verbose)
+
+
+if __name__ == '__main__':
+    main()
