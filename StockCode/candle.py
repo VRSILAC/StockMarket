@@ -38,6 +38,7 @@ def candle_from_stock(stock, width=0.4, colorup='cyan', colordown='red', alpha=0
     ax.autoscale_view()
     ax.add_collection(barCollection)
     ax.add_collection(rangeCollection)
+    ax.set_title(stock.ticker[0])
     return rangeCollection, barCollection
 
 

@@ -223,7 +223,7 @@ def waitbar(total, current):
 def parser():
     parser = argparse.ArgumentParser(description='Stock Market Ticker Downloader')
     parser.add_argument("--ticker_location",
-                        default='/home/carmelo/Documents/StockMarket/Ticker_Lists/tickers.txt',
+                        default='/home/carmelo/Documents/StockMarket/TickerLists/tickers.txt',
                         help="path pointing to a list of tickers to download. must be from text file. tickers seperated by newline")
     parser.add_argument("--csv_location", default='/home/carmelo/Documents/StockMarket/CSVFiles/',
                         help="path pointing to location to save csv files, ex. /home/user/Desktop/CSVFiles/")

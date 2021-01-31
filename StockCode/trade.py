@@ -26,6 +26,16 @@ def main():
     stocks = load_stocks(args.dataset)
     bd, sd, bp, sp, stats = swing_(stocks, day_trade=args.day_trade, hard_stop=args.hard_stop, model_type=args.model,
                                    days_back=args.days_back)
+    trades = []
+    for sidx in range(len(bd)):
+        if bd[sidx] != [] and len(bd[sidx]) == len(sd[sidx]):
+            for t_idx, bday in enumerate(bd[sidx]):
+                trades.append([sidx, bday, sd[sidx][t_idx], bp[sidx][t_idx], sp[sidx][t_idx]])
+
+    trades = np.array(trades)
+    idx = trades[:, 1].argsort(axis=0)
+    trades = trades[idx, :]
+    np.save('trades', trades)
 
 
 if __name__ == '__main__':

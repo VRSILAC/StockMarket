@@ -22,7 +22,7 @@ def compute_stats(buy_day, sell_day, buy_price, sell_price, max_pc):
         buy_price = np.array(buy_price)
         sell_price = np.array(sell_price)
         apg_ = 100 * (sell_price - buy_price[:len(sell_price)]) / buy_price[:len(sell_price)]
-        apg_ = np.array([a if a<max_pc else max_pc for a in apg_])
+        apg_ = np.array([a if a < max_pc else max_pc for a in apg_])
         apg = np.round(np.mean(apg_), 2)
         wp = np.round(len(np.nonzero(apg_ > 0)[0]) / len(buy_day), 2)
         ahl = np.round(np.mean(sell_day - buy_day[:len(sell_day)]), 1)
@@ -92,7 +92,7 @@ def plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks
         apg_, apg, wp, history, ahl = compute_stats(buy_day, sell_day, buy_price, sell_price, max_pc)
         if idx in plot_random:
             look_back = len(stock.metrics[:, 0])
-            fig = plt.figure(figsize=(12, 6))
+            fig = plt.figure(figsize=(16, 8))
             fig.patch.set_facecolor('xkcd:gray')
             gs = gridspec.GridSpec(4, 1)
             ax1 = plt.subplot(gs[:4])
@@ -110,46 +110,107 @@ def plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks
             except Exception:
                 ax1.set_title('Current Trade: ' + stock.ticker[0][:])
             plt.subplots_adjust(hspace=0.4)
-    plt.show()
+    try:
+        plt.show()
+    except KeyboardInterrupt:
+        plt.close()
 
 
 # Excellent Long Strategy for Covid Market Conditions.
+# def get_custom_condition(stock, day):
+#     # if day == -1:
+#     #     return [False, False]
+#     opens = stock.metrics[day - 15:day, stock.names['open']]
+#     close = stock.metrics[day, stock.names['close']]
+#     pc1 = (close - opens) / opens
+#     avg_pc = np.mean(np.abs(pc1))
+#     high = np.max(stock.metrics[day - 15:day - 4, stock.names['high']])
+#     vol = stock.moving_average(10, stock.metrics[day - 10:day, stock.names['volume']])[-1] > 1E6
+#
+#     c1 = stock.metrics[day, stock.names['low']] < high
+#     c2 = stock.metrics[day, stock.names['close']] > high
+#
+#     c3 = stock.metrics[day - 1, stock.names['close']] < high
+#     c4 = stock.metrics[day, stock.names['open']] > high
+#
+#     c5 = any([all([c1, c2]), all([c3, c4])])
+#     c6 = avg_pc > 0.2
+#     c7 = stock.metrics[day, stock.names['ma5']] > stock.metrics[day, stock.names['ma20']]
+#     c8 = stock.metrics[day, stock.names['ma20']] > stock.metrics[day, stock.names['ma50']]
+#     c9 = all(pc1 > -1 * avg_pc)
+#
+#     c11 = stock.metrics[day, stock.names['open']] > np.mean(opens)
+#     c12 = all(stock.metrics[day - 4:day, stock.names['close']] < stock.metrics[day, stock.names['open']])
+#     c13 = stock.metrics[day, stock.names['open']] < 10
+#
+#     c15 = all(stock.metrics[day-4:day, stock.names['gap']] > -0.1)
+#     ## Non Causal
+#     c10 = stock.metrics[day + 1, stock.names['gap']] < 0
+#     c14 = stock.metrics[day + 1, stock.names['gap']] > -0.1
+#
+#     return [all([vol, c5, c6, c7, c8, c9, c11, c12, c13, c15]), all([c10, c14])]
+
+## Less good hmm
+# def get_custom_condition(stock, day):
+#     opens = stock.metrics[day - 15:day+1, stock.names['open']]
+#     close = stock.metrics[day, stock.names['close']]
+#     pc1 = (close - opens) / opens
+#     avg_pc = np.mean(np.abs(pc1))
+#     c1 = stock.metrics[day, stock.names['d1ma5']] > 0
+#     c2 = stock.metrics[day, stock.names['d3ma5']] < 0
+#     c3 = stock.metrics[day, stock.names['d1ma15']] > 0
+#     c4 = stock.metrics[day, stock.names['d1ma20']] < 0
+#     c5 = stock.metrics[day, stock.names['percent_change']] < 0
+#     c6 = stock.metrics[day, stock.names['d1price']] > 0
+#     # c7 = all(pc1[-5:] < 1*avg_pc)
+#     vol = stock.moving_average(10, stock.metrics[day - 10:day+1, stock.names['volume']])[-1] > 1E6
+#     return [all([vol, c1, c2, c3, c4, c5, c6]), True]
+
+### VERY INTERESTING, based on d/dt's mostly.
 def get_custom_condition(stock, day):
+    vol = stock.moving_average(10, stock.metrics[day - 10:day, stock.names['volume']])[-1] > 1E6
     c0 = np.mean(np.abs(stock.metrics[day - 10:day, stock.names['percent_change']])) > 0.05
     c1 = stock.metrics[day, stock.names['d2price']] < 0
     c2 = stock.metrics[day, stock.names['d2ma5']] < 0
     c3 = stock.metrics[day, stock.names['d3ma5']] > 0
     c4 = stock.metrics[day, stock.names['d2ma20']] < 0
     c5 = stock.metrics[day, stock.names['percent_change']] < 0
-    c6 = stock.metrics[day + 1, stock.names['gap']] < 0
-    c7 = stock.metrics[day + 1, stock.names['gap']] > -0.1
-    c8 = stock.metrics[day, stock.names['open']] < 10
+    c6 = stock.metrics[day, stock.names['open']] < 10 and stock.metrics[day, stock.names['open']] > 1
+    opens = stock.metrics[day - 15:day, stock.names['open']]
+    close = stock.metrics[day, stock.names['close']]
+    pc1 = (close - opens) / opens
+    avg_pc_con = -2*np.mean(np.abs(pc1)) #-0.2
+    c7 = any(pc1 < avg_pc_con)
+    ## Non-causal
+    nc1 = stock.metrics[day + 1, stock.names['gap']] < 0
+    nc2 = stock.metrics[day + 1, stock.names['gap']] > -0.1
+    condition = [vol, c0, c1, c2, c3, c4, c5, c6, c7]
+    condition = np.count_nonzero(condition) >= len(condition) - 1
+    return [condition, all([nc1, nc2, vol])]
 
-    return [c1, c2, c3, c4, c5, c6, c7, c8, c0]
-
-
+#### Currently Trading This Strat
 # def get_custom_condition(stock, day):
 #     opens = stock.metrics[day - 15:day, stock.names['open']]
 #     close = stock.metrics[day, stock.names['close']]
 #     pc1 = (close - opens) / opens
-#     avg_pc1 = np.mean(np.abs(pc1))
-#     avg_pc1_con = -0.3  # * avg_pc1
-#     c1 = any(pc1 < avg_pc1_con)
+#     avg_pc = np.mean(np.abs(pc1))
+#     # avg_pc_con = -2.5*avg_pc
+#     avg_pc_con = -0.3
+#     ### Causal
+#     c1 = any(pc1 < avg_pc_con)
 #     c2 = stock.metrics[day, stock.names['gap']] > 0
-#     c3 = stock.metrics[day, stock.names['percent_change']] < 0
+#     ###
+#     c3 = stock.metrics[day, stock.names['percent_change']] <= 0
 #     c4 = stock.metrics[day, stock.names['gap']] < 0.1
-#     c5 = avg_pc1 > 0.05
-#     c6 = stock.metrics[day + 1, stock.names['gap']] >= 0
+#     c5 = avg_pc > 0.05
 #     c7 = stock.moving_average(10, stock.metrics[day - 10:day, stock.names['volume']])[-1] > 1E6
-#     c8 = stock.metrics[day + 1, stock.names['gap']] < 0.1
 #     ##
 #     c9 = stock.metrics[day, stock.names['open']] < 10
-#     c10 = stock.metrics[day, stock.names['open']] > 0.05
-#     ##
-#     # c11 = stock.metrics[day, stock.names['ma5']] < stock.metrics[day, stock.names['ma50']]
-#     # c12 = any(stock.metrics[day-15:day, stock.names['gap']] < -avg_pc1)
-#     # c11 = np.mean(np.abs(pc1[-3:])) < avg_pc1
-#     return [c1, c2, c3, c4, c5, c6, c7, c8, c9, c10]
+#     c10 = stock.metrics[day, stock.names['open']] > 1
+#     ### Non causal
+#     c6 = stock.metrics[day + 1, stock.names['gap']] >= 0
+#     c8 = stock.metrics[day + 1, stock.names['gap']] < 0.1
+#     return [all([c1, c2, c3, c4, c5, c7, c9, c10]), all([c6, c8])]
 
 
 def get_ohlc(stock, day):
@@ -166,6 +227,7 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
     tickers = []
     buy_days = []
     sell_days = []
+    watchlist = []
     buy_prices = []
     sell_prices = []
     current_trades = []
@@ -189,9 +251,11 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
         sell_price = []
         while day < -1:
             pct_range = np.mean(np.abs(stock.metrics[day - 10:day, stock.names['percent_change']]))
-            take_gain_percent = np.min([1 + pct_range * 3, 1.2])
+            take_gain_percent = np.min([1 + pct_range * 3, 1.1])
+            # take_gain_percent = 1.1
             stop_loss_percent = np.max([1 - pct_range * 2, 0.9])
             stop_loss_percent2 = np.max([1 - pct_range * 2, 0.9])
+            # stop_loss_percent = stop_loss_percent2 = 0.9
             if model_type == '2DCNN':
                 prd = model.predict_classes(
                     np.expand_dims(np.expand_dims(stock.trade_data_tensor[day, :, :], axis=2), axis=0))
@@ -254,6 +318,8 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
                         stop_loss = hard_stop_val if hard_stop else stop_loss_percent2 * current_high
             else:
                 day += 1
+        watchlist_conditions = get_custom_condition(stock, -1)[0]
+        if watchlist_conditions: watchlist.append(stock.ticker[0])
         buy_days.append(buy_day)
         sell_days.append(sell_day)
         buy_prices.append(buy_price)
@@ -272,23 +338,26 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
     current_trades = [stocks[cti].ticker[0] + '  ' for cti in current_trades_idx]
     print_stats(stats, tickers)
     print('Current Trades: ' + ''.join(current_trades))
-    plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks_traded_idx, max_pc)
+    print('Watchlist: ' + ' '.join(watchlist))
+    # plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks_traded_idx, max_pc)
     # plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, current_trades_idx, max_pc)
     return buy_days, sell_days, buy_prices, sell_prices, stats
 
 
 def print_stats(stats, tickers):
+    just_avg = True
     stats = np.array(stats)
     zero_mask = np.all(stats == 0, axis=1)
     stats = stats[~np.all(stats == 0, axis=1)]
     tickers = [ticker for idx, ticker in enumerate(tickers) if zero_mask[idx] == False]
     ljn = 8
-    print('Ticker'.ljust(ljn) + ' | ', 'APG'.ljust(ljn) + ' | ', 'Win %'.ljust(ljn) + ' | ',
-          '# Trades'.ljust(ljn) + ' | ', 'AH'.ljust(ljn) + ' | ', 'Profit'.ljust(ljn))
-    for k in range(len(tickers)):
-        stat_print = [tickers[k].ljust(ljn)]
-        stat_print.extend([str(k).ljust(ljn) for k in stats[k, :]])
-        print(' |  '.join(stat_print))
+    if not just_avg:
+        print('Ticker'.ljust(ljn) + ' | ', 'APG'.ljust(ljn) + ' | ', 'Win %'.ljust(ljn) + ' | ',
+              '# Trades'.ljust(ljn) + ' | ', 'AH'.ljust(ljn) + ' | ', 'Profit'.ljust(ljn))
+        for k in range(len(tickers)):
+            stat_print = [tickers[k].ljust(ljn)]
+            stat_print.extend([str(k).ljust(ljn) for k in stats[k, :]])
+            print(' |  '.join(stat_print))
     stat_print = ['Avgs'.ljust(ljn)]
     stat_print.extend([str(k).ljust(ljn) for k in list(np.round(np.mean(stats, 0), 2))])
     print(' |  '.join(stat_print))

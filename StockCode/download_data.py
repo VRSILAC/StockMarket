@@ -149,21 +149,48 @@ def download_parallel_quotes(symbols, list_location, csv_location, verbose):
     output = pool.map(dfunc, symbols)
 
 
-def download_quotes(symbols, csv_location, verbose):
-    symbols = list(symbols.split(','))
-    for symbol in symbols:
-        dq(symbol, csv_location=csv_location, verbose=verbose)
+def download_quotes(args):
+    with open(args.ticker_location, 'r') as tickers:
+        tickers = tickers.read().split('\n')[:-1]
+    new = list(args.add_tickers.split(','))
+    new = [n for n in new if n not in tickers]
+    for symbol in new:
+        dq(symbol, csv_location=args.csv_location, verbose=args.verbose)
+    tickers.extend(new)
+    tickers = list(set(tickers))
+    tickers.sort()
+    with open(args.ticker_location, 'w') as t:
+        t.write('\n'.join(tickers))
+
+
+def remove_tickers(args):
+    with open(args.ticker_location, 'r') as tickers:
+        tickers = tickers.read().split('\n')[:-1]
+    remove = list(args.remove_tickers.split(','))
+    tickers = [n for n in tickers if n not in remove]
+    tickers = list(set(tickers))
+    tickers.sort()
+    with open(args.ticker_location, 'w') as t:
+        t.write('\n'.join(tickers))
+    for ticker in remove:
+        try:
+            os.remove(args.csv_location + ticker + '.csv')
+        except FileNotFoundError:
+            pass
 
 
 def parser():
     parser = argparse.ArgumentParser(description='Stock Market Ticker Downloader')
     parser.add_argument("--ticker_location",
-                        default='/home/carmelo/Documents/StockMarket/Ticker_Lists/tickers.txt',
+                        default='/home/carmelo/Documents/StockMarket/TickerLists/tickers.txt',
                         help="path pointing to a list of tickers to download. must be from text file. tickers seperated by newline")
     parser.add_argument("--csv_location", default='/home/carmelo/Documents/StockMarket/CSVFiles/',
                         help="path pointing to location to save csv files, ex. /home/user/Desktop/CSVFiles/")
-    parser.add_argument("--ticker_string", default='', type=str,
-                        help="download data for a single ticker, or string of tickers. input as string, ex. 'GOOG', or 'GOOG,AAPL,TSLA'."
+    parser.add_argument("--add_tickers", default='', type=str,
+                        help="download data for a tickers and add to list. input as string, ex. 'GOOG', or 'GOOG,AAPL,TSLA'."
+                             " separate by commas only. works when not pointing to a list of tickers already")
+    parser.add_argument("--remove_tickers", default='', type=str,
+                        help="remove data for a tickers . input as string, ex. 'GOOG', or 'GOOG,AAPL,TSLA'."
                              " separate by commas only. works when not pointing to a list of tickers already")
     parser.add_argument("--verbose", default=True, type=bool,
                         help="print status of downloading or not")
@@ -180,11 +207,15 @@ def check_arguments_errors(args):
 def main():
     args = parser()
     check_arguments_errors(args)
-    if args.single_ticker == '':
+    if args.add_tickers == '' and args.remove_tickers == '':
         tickers = gather_tickers(args.ticker_location)[:-1]
         download_parallel_quotes(tickers, args.ticker_location, args.csv_location, args.verbose)
+    elif args.add_tickers != '':
+        download_quotes(args)
+    elif args.remove_tickers != '':
+        remove_tickers(args)
     else:
-        download_quotes(args.single_ticker, args.csv_location, args.verbose)
+        print('Use -h for more info.')
 
 
 if __name__ == '__main__':
