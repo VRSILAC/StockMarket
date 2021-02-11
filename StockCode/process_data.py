@@ -18,6 +18,7 @@ class StockClass:
                 0: lambda s: (datetime.datetime.strptime(s.decode('ascii'), '%Y-%m-%d').timestamp())})
             self.ticker = [symbol]
             data = self.filter_out_nan(data)
+            date = data[:, 0]
             open_, high, low, close, volume = self.ohlcv(data)
             data_mean = data[:, 1:5].mean(1)
             gap = self.gap(open_, close, 1)
@@ -39,13 +40,11 @@ class StockClass:
             ma200 = self.moving_average(200, data_mean)
             d1ma200, d2ma200, d3ma200 = self.derivatives(ma200)
             # mb5, mb4, mb3, mb2, mb1 = (self.mbs(data[:, 1:5], data[:, 6], 30, 5)).T
-            self.metrics = np.column_stack((
-                open_, high, low, close, volume, data_mean, gap, percent_change, d1price, d2price,
-                d3price, d1volume, d2volume, d3volume, ma5, d1ma5, d2ma5, d3ma5, ma10, d1ma10,
-                d2ma10, d3ma10, ma15, d1ma15, d2ma15, d3ma15, ma20, d1ma20, d2ma20, d3ma20, ma50,
-                d1ma50, d2ma50, d3ma50, ma100, d1ma100, d2ma100, d3ma100, ma200, d1ma200, d2ma200,
-                d3ma200))
-            column_name_list = ['open', 'high', 'low', 'close', 'volume', 'data_mean', 'gap',
+            self.metrics = np.column_stack((date, open_, high, low, close, volume, data_mean, gap, percent_change,
+                                            d1price, d2price, d3price, d1volume, d2volume, d3volume, ma5, d1ma5, d2ma5,
+                                            d3ma5, ma10, d1ma10, d2ma10, d3ma10, ma15, d1ma15, d2ma15, d3ma15, ma20,
+                                            d1ma20, d2ma20, d3ma20, ma50, d3ma200))
+            column_name_list = ['date', 'open', 'high', 'low', 'close', 'volume', 'data_mean', 'gap',
                                 'percent_change', 'd1price', 'd2price', 'd3price', 'd1volume',
                                 'd2volume', 'd3volume', 'ma5', 'd1ma5', 'd2ma5', 'd3ma5', 'ma10',
                                 'd1ma10', 'd2ma10', 'd3ma10', 'ma15', 'd1ma15', 'd2ma15', 'd3ma15',
@@ -227,15 +226,19 @@ def parser():
                         help="path pointing to a list of tickers to download. must be from text file. tickers seperated by newline")
     parser.add_argument("--csv_location", default='/home/carmelo/Documents/StockMarket/CSVFiles/',
                         help="path pointing to location to save csv files, ex. /home/user/Desktop/CSVFiles/")
+    parser.add_argument("--data_location", default='/home/carmelo/Documents/StockMarket/StockData/',
+                        help="path pointing to location to save csv files, ex. /home/user/Desktop/StockData/")
     parser.add_argument("--verbose", default=True, type=bool, help="print status of downloading or not")
     return parser.parse_args()
 
 
 def check_arguments_errors(args):
     if not os.path.exists(args.csv_location):
-        raise(ValueError("Invalid csv_location path {}".format(os.path.abspath(args.config_file))))
+        raise (ValueError("Invalid csv_location path {}".format(os.path.abspath(args.config_file))))
     if not os.path.exists(args.ticker_location):
-        raise(ValueError("Invalid ticker_location path {}".format(os.path.abspath(args.weights))))
+        raise (ValueError("Invalid ticker_location path {}".format(os.path.abspath(args.weights))))
+    if not os.path.exists(args.data_location):
+        raise (ValueError("Invalid data_location path {}".format(os.path.abspath(args.weights))))
 
 
 def main():
@@ -244,7 +247,7 @@ def main():
     tickers = gather_tickers(args.ticker_location)[:-1]
     s = parse_csv(tickers, args.csv_location)
     s = clean_stock_list(s)
-    save_stocks(s, 'stocks.obj')
+    save_stocks(s, args.data_location + 'stocks.obj')
     do_days = [500, 250, 100]
     for day in do_days:
         try:
@@ -257,7 +260,7 @@ def main():
                     t.append(stock.ticker[0])
                 else:
                     if args.verbose: print('Duplicate')
-            save_stocks(stocks, 'stocks_' + str(day) + 'd.obj')
+            save_stocks(stocks, args.data_location + 'stocks_' + str(day) + 'd.obj')
         except Exception:
             print(traceback.format_exc())
             pass

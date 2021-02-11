@@ -97,10 +97,10 @@ def plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks
             gs = gridspec.GridSpec(4, 1)
             ax1 = plt.subplot(gs[:4])
             ax1.set_facecolor('xkcd:gray')
-            open = stock.metrics[-look_back:, 0]
-            high = stock.metrics[-look_back:, 1]
-            low = stock.metrics[-look_back:, 2]
-            close = stock.metrics[-look_back:, 3]
+            open = stock.metrics[-look_back:, stock.names['open']]
+            high = stock.metrics[-look_back:, stock.names['high']]
+            low = stock.metrics[-look_back:, stock.names['low']]
+            close = stock.metrics[-look_back:, stock.names['close']]
             candle(ax1, open, high, low, close, colorup="cyan", colordown="red", width=.4)
             plt.plot(np.array(buy_day), np.array(buy_price), 'g.', markersize='15')
             plt.plot(np.array(sell_day), np.array(sell_price), 'r.', markersize='15')
@@ -167,7 +167,7 @@ def plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks
 #     return [all([vol, c1, c2, c3, c4, c5, c6]), True]
 
 ### VERY INTERESTING, based on d/dt's mostly.
-def get_custom_condition(stock, day):
+def get_DTS_condition(stock, day):
     vol = stock.moving_average(10, stock.metrics[day - 10:day, stock.names['volume']])[-1] > 1E6
     c0 = np.mean(np.abs(stock.metrics[day - 10:day, stock.names['percent_change']])) > 0.05
     c1 = stock.metrics[day, stock.names['d2price']] < 0
@@ -179,7 +179,7 @@ def get_custom_condition(stock, day):
     opens = stock.metrics[day - 15:day, stock.names['open']]
     close = stock.metrics[day, stock.names['close']]
     pc1 = (close - opens) / opens
-    avg_pc_con = -2*np.mean(np.abs(pc1)) #-0.2
+    avg_pc_con = -2 * np.mean(np.abs(pc1))  # -0.2
     c7 = any(pc1 < avg_pc_con)
     ## Non-causal
     nc1 = stock.metrics[day + 1, stock.names['gap']] < 0
@@ -188,29 +188,30 @@ def get_custom_condition(stock, day):
     condition = np.count_nonzero(condition) >= len(condition) - 1
     return [condition, all([nc1, nc2, vol])]
 
+
 #### Currently Trading This Strat
-# def get_custom_condition(stock, day):
-#     opens = stock.metrics[day - 15:day, stock.names['open']]
-#     close = stock.metrics[day, stock.names['close']]
-#     pc1 = (close - opens) / opens
-#     avg_pc = np.mean(np.abs(pc1))
-#     # avg_pc_con = -2.5*avg_pc
-#     avg_pc_con = -0.3
-#     ### Causal
-#     c1 = any(pc1 < avg_pc_con)
-#     c2 = stock.metrics[day, stock.names['gap']] > 0
-#     ###
-#     c3 = stock.metrics[day, stock.names['percent_change']] <= 0
-#     c4 = stock.metrics[day, stock.names['gap']] < 0.1
-#     c5 = avg_pc > 0.05
-#     c7 = stock.moving_average(10, stock.metrics[day - 10:day, stock.names['volume']])[-1] > 1E6
-#     ##
-#     c9 = stock.metrics[day, stock.names['open']] < 10
-#     c10 = stock.metrics[day, stock.names['open']] > 1
-#     ### Non causal
-#     c6 = stock.metrics[day + 1, stock.names['gap']] >= 0
-#     c8 = stock.metrics[day + 1, stock.names['gap']] < 0.1
-#     return [all([c1, c2, c3, c4, c5, c7, c9, c10]), all([c6, c8])]
+def get_SO_condition(stock, day):
+    opens = stock.metrics[day - 15:day, stock.names['open']]
+    close = stock.metrics[day, stock.names['close']]
+    pc1 = (close - opens) / opens
+    avg_pc = np.mean(np.abs(pc1))
+    # avg_pc_con = -2.5*avg_pc
+    avg_pc_con = -0.3
+    ### Causal
+    c1 = any(pc1 < avg_pc_con)
+    c2 = stock.metrics[day, stock.names['gap']] > 0
+    ###
+    c3 = stock.metrics[day, stock.names['percent_change']] <= 0
+    c4 = stock.metrics[day, stock.names['gap']] < 0.1
+    c5 = avg_pc > 0.05
+    c7 = stock.moving_average(10, stock.metrics[day - 10:day, stock.names['volume']])[-1] > 1E6
+    ##
+    c9 = stock.metrics[day, stock.names['open']] < 10
+    c10 = stock.metrics[day, stock.names['open']] > 1
+    ### Non causal
+    c6 = stock.metrics[day + 1, stock.names['gap']] >= 0
+    c8 = stock.metrics[day + 1, stock.names['gap']] < 0.1
+    return [all([c1, c2, c3, c4, c5, c7, c9, c10]), all([c6, c8])]
 
 
 def get_ohlc(stock, day):
@@ -221,16 +222,35 @@ def get_ohlc(stock, day):
     return open, high, low, close
 
 
+def get_watchlist(stocks, model_type, save_close=False):
+    import datetime
+    watchlist = []
+    for stock in stocks:
+        if model_type == 'SO':
+            watchlist_conditions = get_SO_condition(stock, -1)
+        elif model_type == 'DTS':
+            watchlist_conditions = get_DTS_condition(stock, -1)
+        else:
+            print('Model not supported')
+            return
+        if watchlist_conditions[0]:
+            date = datetime.datetime.fromtimestamp(stock.metrics[-1, 0])
+            date = [date.year, date.month, date.day]
+            if save_close:
+                watchlist.append([(stock.ticker[0]), stock.metrics[-1, stock.names['close']], date])
+            else:
+                watchlist.append(stock.ticker[0])
+    return watchlist
+
+
 def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=False, days_back=20):
     max_pc = 20
     stats = []
     tickers = []
     buy_days = []
     sell_days = []
-    watchlist = []
     buy_prices = []
     sell_prices = []
-    current_trades = []
     current_trades_idx = []
     stocks_traded_idx = []
     total = len(stocks)
@@ -251,20 +271,21 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
         sell_price = []
         while day < -1:
             pct_range = np.mean(np.abs(stock.metrics[day - 10:day, stock.names['percent_change']]))
-            take_gain_percent = np.min([1 + pct_range * 3, 1.1])
-            # take_gain_percent = 1.1
-            stop_loss_percent = np.max([1 - pct_range * 2, 0.9])
-            stop_loss_percent2 = np.max([1 - pct_range * 2, 0.9])
-            # stop_loss_percent = stop_loss_percent2 = 0.9
-            if model_type == '2DCNN':
-                prd = model.predict_classes(
-                    np.expand_dims(np.expand_dims(stock.trade_data_tensor[day, :, :], axis=2), axis=0))
-                condition = [True] if prd == 1 else [False]
-            elif model_type == 'ANN':
-                prd = model.predict_classes(np.expand_dims(stock.trade_data[day, :], axis=0))
-                condition = [True] if prd == 1 else [False]
+            if model_type == 'SO':
+                take_gain_percent = np.min([1 + pct_range * 3, 1.2])
+                stop_loss_percent = np.max([1 - pct_range * 2, 0.85])
+                stop_loss_percent2 = np.max([1 - pct_range * 2, 0.85])
             else:
-                condition = get_custom_condition(stock, day)
+                take_gain_percent = np.min([1 + pct_range * 3, 1.1])
+                stop_loss_percent = np.max([1 - pct_range * 2, 0.9])
+                stop_loss_percent2 = np.max([1 - pct_range * 2, 0.9])
+            if model_type == 'SO':
+                condition = get_SO_condition(stock, day)
+            elif model_type == 'DTS':
+                condition = get_DTS_condition(stock, day)
+            else:
+                print('Model no supported')
+                return
             if all(condition):
                 # if np.count_nonzero(condition) >= len(condition) - 1:
                 day += 1
@@ -318,8 +339,6 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
                         stop_loss = hard_stop_val if hard_stop else stop_loss_percent2 * current_high
             else:
                 day += 1
-        watchlist_conditions = get_custom_condition(stock, -1)[0]
-        if watchlist_conditions: watchlist.append(stock.ticker[0])
         buy_days.append(buy_day)
         sell_days.append(sell_day)
         buy_prices.append(buy_price)
@@ -335,17 +354,18 @@ def swing_(stocks, day_trade=False, hard_stop=True, model_type='Custom', model=F
         tickers.append(stock.ticker[0][:])
         if len(sell_day) > 0:
             stocks_traded_idx.append(idx)
+    watchlist = get_watchlist(stocks, model_type)
     current_trades = [stocks[cti].ticker[0] + '  ' for cti in current_trades_idx]
     print_stats(stats, tickers)
     print('Current Trades: ' + ''.join(current_trades))
     print('Watchlist: ' + ' '.join(watchlist))
     # plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, stocks_traded_idx, max_pc)
-    # plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, current_trades_idx, max_pc)
+    plot_from_strat(buy_days, sell_days, buy_prices, sell_prices, stocks, current_trades_idx, max_pc)
     return buy_days, sell_days, buy_prices, sell_prices, stats
 
 
 def print_stats(stats, tickers):
-    just_avg = True
+    just_avg = False
     stats = np.array(stats)
     zero_mask = np.all(stats == 0, axis=1)
     stats = stats[~np.all(stats == 0, axis=1)]
