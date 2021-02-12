@@ -10,6 +10,7 @@ import traceback
 import datetime
 import pickle
 import tda
+import os
 
 
 # driver_path = '/home/carmelo/Documents/StockMarket/StockCode/TOS/chromedriver_linux64/chromedriver'
@@ -99,7 +100,7 @@ def get_buy_list(c, model, funds_per_trade, buy_dict={}):
     close_price = [c[1] for c in watchlist]
     premarket = c.get_quotes(tickers)
     premarket = premarket.json()
-    open_ = [premarket[ticker]["mark"] for ticker in tickers]
+    open_ = [premarket[ticker]["openPrice"] for ticker in tickers]
     gap = np.array(open_) / np.array(close_price) - 1
     for idx, g in enumerate(gap):
         if model == 'SO':
@@ -203,11 +204,11 @@ def monitor(c, p):
             p[stock]['high_price'] = hl[stock]['high_price']
             p[stock]['stop_loss_1'] = np.round(high_price * p[stock]['stop_loss_percent'], 2)
         if p[stock]['days_held'] > 0:
-            if last_price - p[stock]['stop_loss_1'] < 0.01:
+            if last_price - p[stock]['stop_loss_1'] < 0.04:
                 c.cancel_order(account_id, p[stock]['sell_order_id'])
                 p = stop_loss_sell(c, stock, p, 'stop_loss_1')
         else:
-            if last_price - p[stock]['stop_loss_0'] < 0.01:
+            if last_price - p[stock]['stop_loss_0'] < 0.04:
                 c.cancel_order(account_id, p[stock]['sell_order_id'])
                 p = stop_loss_sell(c, stock, p, 'stop_loss_0')
     p = update_positions(p)
@@ -218,15 +219,19 @@ def main():
     c = easy_client(api_key=client_id,
                     redirect_uri=redirect_uri,
                     token_path='/home/carmelo/Documents/StockMarket/StockCode/TOS/token.pickle')
-    fpt = 300
-    buy_dict = get_buy_list(c, 'SO', fpt)
+    fpt = 30
+    buy_dict_day = 0
     if os.path.exists('positions.pickle'): p = get_positions()
     while True:
+        day = get_day_params()
+        day_condition = all([day[3] >= 6, day[4] > 30, day[3] < 13])
+        download_condition = 16 <= day[3] < 21
+        if all([day[3] >= 6, day[4] > 30]) and buy_dict_day != day[2]:
+            buy_dict = get_buy_list(c, 'SO', fpt)
+            buy_dict = get_buy_list(c, 'DTS', fpt, buy_dict)
+            buy_dict_day = day[2]
         try:
-            day = get_day_params()
             account, round_trips, available_funds, num_trades_available = get_account_deets(c, funds_per_trade=fpt)
-            day_condition = all([day[3] >= 6, day[4] > 30, day[3] < 13])
-            # download_condition = all()
             if num_trades_available > 0 and len(buy_dict) > 0 and day_condition:
                 buy_today = random.sample(list(buy_dict.keys()), num_trades_available)
                 p = buy(c, buy_dict, buy_today)
@@ -242,7 +247,13 @@ def main():
         except Exception:
             print(traceback.format_exc())
             pass
-        do_sleep(44, 45)
+        if day[3] > 13 or day[3] < 6:
+            do_sleep(600, 601)
+        else:
+            do_sleep(44, 45)
+        if download_condition:
+            print('download_data.py')
+            print('process_data.py')
 
 
 main()
